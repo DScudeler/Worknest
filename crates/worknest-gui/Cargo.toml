@@ -1,0 +1,34 @@
+[package]
+name = "worknest-gui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "worknest"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+worknest-core = { path = "../worknest-core" }
+worknest-db = { path = "../worknest-db" }
+worknest-auth = { path = "../worknest-auth" }
+worknest-api = { path = "../worknest-api" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+# rfd.workspace = true  # Optional: will enable when needed
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dirs.workspace = true
+
+[features]
+default = []

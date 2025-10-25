@@ -1,0 +1,38 @@
+[package]
+name = "worknest-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "worknest-api"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+worknest-core = { path = "../worknest-core" }
+worknest-db = { path = "../worknest-db" }
+worknest-auth = { path = "../worknest-auth" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+validator.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# Web framework
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+hyper.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
