@@ -81,7 +81,6 @@ async fn auth_middleware(
 /// Extractor for authenticated user
 struct AuthUser(User);
 
-#[axum::async_trait]
 impl axum::extract::FromRequestParts<AppState> for AuthUser {
     type Rejection = AppError;
 
