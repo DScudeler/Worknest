@@ -1,0 +1,33 @@
+# Rustfmt configuration for Worknest
+# Only stable features are enabled
+
+# Edition
+edition = "2021"
+
+# Maximum line width
+max_width = 100
+
+# Indentation
+tab_spaces = 4
+hard_tabs = false
+
+# Formatting
+newline_style = "Unix"
+use_small_heuristics = "Default"
+force_explicit_abi = true
+
+# Match
+match_block_trailing_comma = true
+
+# Misc
+remove_nested_parens = true
+use_try_shorthand = true
+use_field_init_shorthand = true
+
+# Reordering
+reorder_imports = true
+reorder_modules = true
+
+# Note: Many formatting options require nightly Rust.
+# For advanced formatting, use: rustup run nightly cargo fmt
+# or add +nightly to your cargo fmt commands.

@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build-release:
+    name: Build Release Binary
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Build release binary
+        run: cargo build --release --package worknest-gui
+
+      - name: Strip binary
+        run: strip target/release/worknest
+
+      - name: Create archive
+        run: |
+          cd target/release
+          tar czf worknest-linux-x86_64.tar.gz worknest
+          cd ../..
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/release/worknest-linux-x86_64.tar.gz
+          asset_name: worknest-linux-x86_64.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Generate checksums
+        run: |
+          cd target/release
+          sha256sum worknest-linux-x86_64.tar.gz > worknest-linux-x86_64.tar.gz.sha256
+          cd ../..
+
+      - name: Upload checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/release/worknest-linux-x86_64.tar.gz.sha256
+          asset_name: worknest-linux-x86_64.tar.gz.sha256
+          asset_content_type: text/plain
