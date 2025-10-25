@@ -24,6 +24,10 @@ pub enum CoreError {
     /// Business rule violation
     #[error("Business rule violation: {0}")]
     BusinessRule(String),
+
+    /// Invalid ID format
+    #[error("Invalid ID: {0}")]
+    InvalidId(String),
 }
 
 /// Result type alias using CoreError
