@@ -28,6 +28,7 @@ egui_extras.workspace = true
 # rfd.workspace = true  # Optional: will enable when needed
 tracing.workspace = true
 tracing-subscriber.workspace = true
+dirs.workspace = true
 
 [features]
 default = []

@@ -58,6 +58,9 @@ egui_extras = "0.24"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Utilities
+dirs = "5.0"
+
 # Async (for future use)
 tokio = { version = "1.35", features = ["full"] }
 
