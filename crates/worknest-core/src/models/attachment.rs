@@ -21,7 +21,6 @@ impl AttachmentId {
             Uuid::parse_str(s).map_err(|e| CoreError::InvalidId(e.to_string()))?,
         ))
     }
-
 }
 
 impl Default for AttachmentId {
