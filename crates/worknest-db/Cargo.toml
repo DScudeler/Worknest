@@ -23,4 +23,4 @@ tracing.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
-tempfile = "3.8"
+tempfile = "3.23"

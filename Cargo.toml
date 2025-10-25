@@ -18,7 +18,7 @@ homepage = "https://github.com/DScudeler/Worknest"
 
 [workspace.dependencies]
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
 
 # Date/Time
@@ -37,7 +37,7 @@ validator = { version = "0.20", features = ["derive"] }
 # Database
 rusqlite = { version = "0.37", features = ["bundled", "chrono", "uuid"] }
 r2d2 = "0.8"
-r2d2_sqlite = "0.23"
+r2d2_sqlite = "0.31"
 refinery = { version = "0.9", features = ["rusqlite"] }
 
 # Authentication
@@ -50,7 +50,7 @@ eframe = { version = "0.33", default-features = false, features = [
     "default_fonts",
     "glow",
 ] }
-egui = "0.24"
+egui = "0.33"
 egui_extras = "0.33"
 # rfd = "0.12"  # Optional: will enable when needed (requires system deps)
 
@@ -62,13 +62,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5.0"
 
 # Async
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 
 # Web framework
-axum = { version = "0.7", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
-hyper = { version = "1.0", features = ["full"] }
+hyper = { version = "1.7", features = ["full"] }
 
 # Testing
 proptest = "1.4"
