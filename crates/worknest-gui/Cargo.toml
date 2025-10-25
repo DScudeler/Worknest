@@ -13,9 +13,6 @@ path = "src/main.rs"
 [dependencies]
 # Workspace dependencies
 worknest-core = { path = "../worknest-core" }
-worknest-db = { path = "../worknest-db" }
-worknest-auth = { path = "../worknest-auth" }
-worknest-api = { path = "../worknest-api" }
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
@@ -25,10 +22,36 @@ anyhow.workspace = true
 eframe.workspace = true
 egui.workspace = true
 egui_extras.workspace = true
-# rfd.workspace = true  # Optional: will enable when needed
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+# Web/WASM dependencies
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Storage",
+    "Location",
+    "Headers",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "console",
+] }
+gloo-storage = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+
+# Conditional native dependencies
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+worknest-db = { path = "../worknest-db" }
+worknest-auth = { path = "../worknest-auth" }
 dirs.workspace = true
+tokio = { workspace = true, features = ["rt"] }
 
 [features]
-default = []
+default = ["native"]
+native = []
+web = []

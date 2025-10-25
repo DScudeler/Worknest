@@ -1,0 +1,12 @@
+[build]
+target = "crates/worknest-gui/index.html"
+dist = "dist"
+public_url = "/"
+
+[watch]
+ignore = ["dist", "target"]
+
+[serve]
+address = "127.0.0.1"
+port = 8080
+open = false
