@@ -19,11 +19,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use worknest_auth::AuthService;
 use worknest_core::models::{
-    Priority, Project, ProjectId, Ticket, TicketId, TicketStatus, TicketType, User,
+    Attachment, AttachmentId, Comment, CommentId, Priority, Project, ProjectId, Ticket, TicketId,
+    TicketStatus, TicketType, User,
 };
 use worknest_db::{
-    init_pool, run_migrations, DbError, DbPool, ProjectRepository, Repository, TicketRepository,
-    UserRepository,
+    init_pool, run_migrations, AttachmentRepository, CommentRepository, DbError, DbPool,
+    ProjectRepository, Repository, TicketRepository, UserRepository,
 };
 
 /// Shared application state
@@ -34,6 +35,8 @@ struct AppState {
     user_repo: Arc<UserRepository>,
     project_repo: Arc<ProjectRepository>,
     ticket_repo: Arc<TicketRepository>,
+    comment_repo: Arc<CommentRepository>,
+    attachment_repo: Arc<AttachmentRepository>,
 }
 
 // ============================================================================
@@ -122,6 +125,8 @@ async fn main() {
     let user_repo = Arc::new(UserRepository::new(Arc::clone(&pool)));
     let project_repo = Arc::new(ProjectRepository::new(Arc::clone(&pool)));
     let ticket_repo = Arc::new(TicketRepository::new(Arc::clone(&pool)));
+    let comment_repo = Arc::new(CommentRepository::new(Arc::clone(&pool)));
+    let attachment_repo = Arc::new(AttachmentRepository::new(Arc::clone(&pool)));
     let auth_service = Arc::new(AuthService::new(
         Arc::clone(&user_repo),
         secret_key,
@@ -134,6 +139,8 @@ async fn main() {
         user_repo,
         project_repo,
         ticket_repo,
+        comment_repo,
+        attachment_repo,
     };
 
     // Build router
@@ -158,6 +165,21 @@ async fn main() {
             "/api/tickets/:id",
             get(get_ticket).put(update_ticket).delete(delete_ticket),
         )
+        // Comments
+        .route(
+            "/api/tickets/:ticket_id/comments",
+            get(list_comments_for_ticket).post(create_comment),
+        )
+        .route(
+            "/api/comments/:id",
+            put(update_comment).delete(delete_comment),
+        )
+        // Attachments
+        .route(
+            "/api/tickets/:ticket_id/attachments",
+            get(list_attachments_for_ticket),
+        )
+        .route("/api/attachments/:id", delete(delete_attachment))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -709,6 +731,221 @@ async fn delete_ticket(
             match e {
                 DbError::NotFound(_) => AppError::NotFound("Ticket not found".to_string()),
                 _ => AppError::Internal("Failed to delete ticket".to_string()),
+            }
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================================================================
+// Comment Routes
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct CommentDto {
+    id: String,
+    ticket_id: String,
+    user_id: String,
+    content: String,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<Comment> for CommentDto {
+    fn from(comment: Comment) -> Self {
+        Self {
+            id: comment.id.to_string(),
+            ticket_id: comment.ticket_id.to_string(),
+            user_id: comment.user_id.to_string(),
+            content: comment.content,
+            created_at: comment.created_at.to_rfc3339(),
+            updated_at: comment.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+async fn list_comments_for_ticket(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(ticket_id): Path<String>,
+) -> Result<Json<Vec<CommentDto>>, AppError> {
+    let ticket_id = TicketId::from_string(&ticket_id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    let comments = state
+        .comment_repo
+        .find_by_ticket(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to list comments: {:?}", e);
+            AppError::Internal("Failed to retrieve comments".to_string())
+        })?;
+
+    Ok(Json(comments.into_iter().map(CommentDto::from).collect()))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateCommentRequest {
+    content: String,
+}
+
+async fn create_comment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(ticket_id): Path<String>,
+    Json(req): Json<CreateCommentRequest>,
+) -> Result<Json<CommentDto>, AppError> {
+    let ticket_id = TicketId::from_string(&ticket_id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    let comment = Comment::new(ticket_id, user.id, req.content);
+
+    // Validate
+    comment.validate().map_err(|e| {
+        tracing::error!("Comment validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let created_comment = state
+        .comment_repo
+        .create(&comment)
+        .map_err(|e| {
+            tracing::error!("Failed to create comment: {:?}", e);
+            AppError::Internal("Failed to create comment".to_string())
+        })?;
+
+    Ok(Json(created_comment.into()))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateCommentRequest {
+    content: String,
+}
+
+async fn update_comment(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateCommentRequest>,
+) -> Result<Json<CommentDto>, AppError> {
+    let comment_id = CommentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
+
+    let mut comment = state
+        .comment_repo
+        .find_by_id(comment_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get comment: {:?}", e);
+            AppError::Internal("Failed to retrieve comment".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Comment not found".to_string()))?;
+
+    comment.content = req.content;
+
+    // Validate
+    comment.validate().map_err(|e| {
+        tracing::error!("Comment validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let updated_comment = state
+        .comment_repo
+        .update(&comment)
+        .map_err(|e| {
+            tracing::error!("Failed to update comment: {:?}", e);
+            AppError::Internal("Failed to update comment".to_string())
+        })?;
+
+    Ok(Json(updated_comment.into()))
+}
+
+async fn delete_comment(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let comment_id = CommentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
+
+    state
+        .comment_repo
+        .delete(comment_id)
+        .map_err(|e| {
+            tracing::error!("Failed to delete comment: {:?}", e);
+            match e {
+                DbError::NotFound(_) => AppError::NotFound("Comment not found".to_string()),
+                _ => AppError::Internal("Failed to delete comment".to_string()),
+            }
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================================================================
+// Attachment Routes
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct AttachmentDto {
+    id: String,
+    ticket_id: String,
+    filename: String,
+    file_size: i64,
+    mime_type: String,
+    uploaded_by: String,
+    created_at: String,
+}
+
+impl From<Attachment> for AttachmentDto {
+    fn from(attachment: Attachment) -> Self {
+        Self {
+            id: attachment.id.to_string(),
+            ticket_id: attachment.ticket_id.to_string(),
+            filename: attachment.filename,
+            file_size: attachment.file_size,
+            mime_type: attachment.mime_type,
+            uploaded_by: attachment.uploaded_by.to_string(),
+            created_at: attachment.created_at.to_rfc3339(),
+        }
+    }
+}
+
+async fn list_attachments_for_ticket(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(ticket_id): Path<String>,
+) -> Result<Json<Vec<AttachmentDto>>, AppError> {
+    let ticket_id = TicketId::from_string(&ticket_id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    let attachments = state
+        .attachment_repo
+        .find_by_ticket(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to list attachments: {:?}", e);
+            AppError::Internal("Failed to retrieve attachments".to_string())
+        })?;
+
+    Ok(Json(
+        attachments.into_iter().map(AttachmentDto::from).collect(),
+    ))
+}
+
+async fn delete_attachment(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let attachment_id = AttachmentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid attachment ID".to_string()))?;
+
+    state
+        .attachment_repo
+        .delete(attachment_id)
+        .map_err(|e| {
+            tracing::error!("Failed to delete attachment: {:?}", e);
+            match e {
+                DbError::NotFound(_) => AppError::NotFound("Attachment not found".to_string()),
+                _ => AppError::Internal("Failed to delete attachment".to_string()),
             }
         })?;
 
