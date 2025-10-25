@@ -51,7 +51,7 @@ eframe = { version = "0.24", default-features = false, features = [
     "glow",
 ] }
 egui = "0.24"
-egui_extras = "0.24"
+egui_extras = "0.33"
 # rfd = "0.12"  # Optional: will enable when needed (requires system deps)
 
 # Logging
