@@ -2,12 +2,15 @@
 //!
 //! Online-first API server for web and optionally desktop clients.
 
+use std::fs;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, Request, State},
-    http::{HeaderMap, StatusCode},
+    body::Bytes,
+    extract::{Multipart, Path, Request, State},
+    http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -177,9 +180,12 @@ async fn main() {
         // Attachments
         .route(
             "/api/tickets/:ticket_id/attachments",
-            get(list_attachments_for_ticket),
+            get(list_attachments_for_ticket).post(upload_attachment),
         )
-        .route("/api/attachments/:id", delete(delete_attachment))
+        .route(
+            "/api/attachments/:id",
+            get(download_attachment).delete(delete_attachment),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -938,6 +944,17 @@ async fn delete_attachment(
     let attachment_id = AttachmentId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid attachment ID".to_string()))?;
 
+    // Get attachment to find file path
+    let attachment = state
+        .attachment_repo
+        .find_by_id(attachment_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get attachment: {:?}", e);
+            AppError::Internal("Failed to retrieve attachment".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Attachment not found".to_string()))?;
+
+    // Delete from database
     state
         .attachment_repo
         .delete(attachment_id)
@@ -949,7 +966,160 @@ async fn delete_attachment(
             }
         })?;
 
+    // Delete file from disk (ignore errors if file doesn't exist)
+    let _ = fs::remove_file(&attachment.file_path);
+
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn upload_attachment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(ticket_id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<Json<AttachmentDto>, AppError> {
+    let ticket_id = TicketId::from_string(&ticket_id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    // Verify ticket exists
+    state
+        .ticket_repo
+        .find_by_id(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get ticket: {:?}", e);
+            AppError::Internal("Failed to verify ticket".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Ticket not found".to_string()))?;
+
+    // Create uploads directory if it doesn't exist
+    let upload_dir = PathBuf::from("./uploads");
+    fs::create_dir_all(&upload_dir).map_err(|e| {
+        tracing::error!("Failed to create uploads directory: {:?}", e);
+        AppError::Internal("Failed to create uploads directory".to_string())
+    })?;
+
+    // Process multipart form
+    let mut filename: Option<String> = None;
+    let mut file_data: Option<Bytes> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Invalid multipart data: {}", e)))?
+    {
+        let field_name = field.name().unwrap_or("").to_string();
+
+        if field_name == "file" {
+            filename = field.file_name().map(|s| s.to_string());
+            file_data = Some(field.bytes().await.map_err(|e| {
+                AppError::BadRequest(format!("Failed to read file data: {}", e))
+            })?);
+        }
+    }
+
+    let filename = filename.ok_or_else(|| AppError::BadRequest("No file provided".to_string()))?;
+    let file_data =
+        file_data.ok_or_else(|| AppError::BadRequest("No file data provided".to_string()))?;
+
+    // Generate unique filename
+    let file_ext = std::path::Path::new(&filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let unique_filename = format!(
+        "{}_{}",
+        uuid::Uuid::new_v4(),
+        filename.replace(&['/', '\\', ':', '*', '?', '"', '<', '>', '|'][..], "_")
+    );
+
+    let file_path = upload_dir.join(&unique_filename);
+
+    // Write file to disk
+    fs::write(&file_path, &file_data).map_err(|e| {
+        tracing::error!("Failed to write file: {:?}", e);
+        AppError::Internal("Failed to save file".to_string())
+    })?;
+
+    // Detect MIME type based on extension
+    let mime_type = match file_ext.to_lowercase().as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "pdf" => "application/pdf",
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "txt" => "text/plain",
+        _ => "application/octet-stream",
+    }
+    .to_string();
+
+    // Create attachment record
+    let attachment = Attachment::new(
+        ticket_id,
+        filename,
+        file_data.len() as i64,
+        mime_type,
+        file_path.to_string_lossy().to_string(),
+        user.id,
+    );
+
+    // Validate
+    attachment.validate().map_err(|e| {
+        tracing::error!("Attachment validation failed: {:?}", e);
+        // Clean up file on validation error
+        let _ = fs::remove_file(&file_path);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let created_attachment = state
+        .attachment_repo
+        .create(&attachment)
+        .map_err(|e| {
+            tracing::error!("Failed to create attachment: {:?}", e);
+            // Clean up file on database error
+            let _ = fs::remove_file(&file_path);
+            AppError::Internal("Failed to create attachment".to_string())
+        })?;
+
+    Ok(Json(created_attachment.into()))
+}
+
+async fn download_attachment(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    let attachment_id = AttachmentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid attachment ID".to_string()))?;
+
+    let attachment = state
+        .attachment_repo
+        .find_by_id(attachment_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get attachment: {:?}", e);
+            AppError::Internal("Failed to retrieve attachment".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Attachment not found".to_string()))?;
+
+    // Read file from disk
+    let file_data = fs::read(&attachment.file_path).map_err(|e| {
+        tracing::error!("Failed to read file: {:?}", e);
+        AppError::NotFound("File not found on disk".to_string())
+    })?;
+
+    // Return file with appropriate headers
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, attachment.mime_type.clone()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", attachment.filename),
+            ),
+            (header::CONTENT_LENGTH, file_data.len().to_string()),
+        ],
+        file_data,
+    ))
 }
 
 // ============================================================================
