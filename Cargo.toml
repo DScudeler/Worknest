@@ -1,0 +1,79 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/worknest-core",
+    "crates/worknest-db",
+    "crates/worknest-auth",
+    "crates/worknest-api",
+    "crates/worknest-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Worknest Contributors"]
+license = "MIT"
+repository = "https://github.com/DScudeler/Worknest"
+homepage = "https://github.com/DScudeler/Worknest"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Identifiers
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# Database
+rusqlite = { version = "0.30", features = ["bundled", "chrono", "uuid"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.23"
+refinery = { version = "0.8", features = ["rusqlite"] }
+
+# Authentication
+bcrypt = "0.15"
+jsonwebtoken = "9.2"
+rand = "0.8"
+
+# GUI
+eframe = { version = "0.24", default-features = false, features = [
+    "default_fonts",
+    "glow",
+] }
+egui = "0.24"
+egui_extras = "0.24"
+# rfd = "0.12"  # Optional: will enable when needed (requires system deps)
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async (for future use)
+tokio = { version = "1.35", features = ["full"] }
+
+# Testing
+proptest = "1.4"
+mockall = "0.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 2
