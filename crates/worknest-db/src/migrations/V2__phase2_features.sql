@@ -109,16 +109,15 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
     ('role_viewer', 'perm_project_read'),
     ('role_viewer', 'perm_ticket_read');
 
--- User roles assignment
+-- User roles assignment (simplified: project_id defaults to '' for global roles)
 CREATE TABLE user_roles (
     user_id TEXT NOT NULL,
     role_id TEXT NOT NULL,
-    project_id TEXT,
+    project_id TEXT NOT NULL DEFAULT '',
     assigned_at TEXT NOT NULL,
-    PRIMARY KEY (user_id, role_id, COALESCE(project_id, '')),
+    PRIMARY KEY (user_id, role_id, project_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_user_roles_user ON user_roles(user_id);

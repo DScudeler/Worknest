@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::UserId;
-use crate::error::{Result, CoreError};
+use crate::error::{CoreError, Result};
 
 /// Unique identifier for teams
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -22,9 +22,6 @@ impl TeamId {
         ))
     }
 
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
 }
 
 impl Default for TeamId {

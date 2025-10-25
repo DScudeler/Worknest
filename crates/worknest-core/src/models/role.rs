@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::{Result, CoreError};
+use crate::error::{CoreError, Result};
 
 /// Unique identifier for roles
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -21,9 +21,6 @@ impl RoleId {
         ))
     }
 
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
 }
 
 impl Default for RoleId {
@@ -53,9 +50,6 @@ impl PermissionId {
         ))
     }
 
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
 }
 
 impl Default for PermissionId {
@@ -158,9 +152,7 @@ impl Permission {
         }
 
         if self.action.trim().is_empty() {
-            return Err(CoreError::Validation(
-                "Action cannot be empty".to_string(),
-            ));
+            return Err(CoreError::Validation("Action cannot be empty".to_string()));
         }
 
         // Permission name should follow format: resource:action

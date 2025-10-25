@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{TicketId, UserId};
-use crate::error::{Result, CoreError};
+use crate::error::{CoreError, Result};
 
 /// Unique identifier for comments
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -22,9 +22,6 @@ impl CommentId {
         ))
     }
 
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
 }
 
 impl Default for CommentId {
