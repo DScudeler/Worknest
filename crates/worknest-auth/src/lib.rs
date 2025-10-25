@@ -5,10 +5,10 @@
 //! and session handling.
 
 pub mod error;
+pub mod password;
+pub mod service;
+pub mod token;
 
 pub use error::{AuthError, Result};
-
-// Placeholder: Auth modules will be implemented as part of MVP development
-// pub mod service;
-// pub mod token;
-// pub mod password;
+pub use service::AuthService;
+pub use token::{AuthToken, Claims};
