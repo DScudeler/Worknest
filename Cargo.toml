@@ -38,7 +38,7 @@ validator = { version = "0.20", features = ["derive"] }
 rusqlite = { version = "0.37", features = ["bundled", "chrono", "uuid"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.23"
-refinery = { version = "0.8", features = ["rusqlite"] }
+refinery = { version = "0.9", features = ["rusqlite"] }
 
 # Authentication
 bcrypt = "0.17"
