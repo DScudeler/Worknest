@@ -6,8 +6,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Request, State},
+    http::{HeaderMap, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
@@ -17,8 +18,13 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use worknest_auth::AuthService;
-use worknest_core::models::User;
-use worknest_db::{init_pool, run_migrations, DbPool, UserRepository};
+use worknest_core::models::{
+    Priority, Project, ProjectId, Ticket, TicketId, TicketStatus, TicketType, User,
+};
+use worknest_db::{
+    init_pool, run_migrations, DbError, DbPool, ProjectRepository, Repository, TicketRepository,
+    UserRepository,
+};
 
 /// Shared application state
 #[derive(Clone)]
@@ -26,6 +32,65 @@ struct AppState {
     pool: Arc<DbPool>,
     auth_service: Arc<AuthService>,
     user_repo: Arc<UserRepository>,
+    project_repo: Arc<ProjectRepository>,
+    ticket_repo: Arc<TicketRepository>,
+}
+
+// ============================================================================
+// Authentication Middleware & Extractor
+// ============================================================================
+
+/// Middleware to verify JWT token and attach authenticated user to request
+async fn auth_middleware(
+    State(state): State<AppState>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    // Extract Authorization header
+    let auth_header = request
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+
+    // Extract token from "Bearer <token>"
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| AppError::Unauthorized("Invalid Authorization header format".to_string()))?;
+
+    // Verify token and get user
+    let user = state
+        .auth_service
+        .get_user_from_token(token)
+        .map_err(|e| {
+            tracing::warn!("Token verification failed: {:?}", e);
+            AppError::Unauthorized("Invalid or expired token".to_string())
+        })?;
+
+    // Attach user to request extensions for handlers to use
+    request.extensions_mut().insert(user);
+
+    Ok(next.run(request).await)
+}
+
+/// Extractor for authenticated user
+struct AuthUser(User);
+
+#[axum::async_trait]
+impl axum::extract::FromRequestParts<AppState> for AuthUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<User>()
+            .cloned()
+            .map(AuthUser)
+            .ok_or_else(|| AppError::Unauthorized("User not authenticated".to_string()))
+    }
 }
 
 #[tokio::main]
@@ -55,6 +120,8 @@ async fn main() {
     });
 
     let user_repo = Arc::new(UserRepository::new(Arc::clone(&pool)));
+    let project_repo = Arc::new(ProjectRepository::new(Arc::clone(&pool)));
+    let ticket_repo = Arc::new(TicketRepository::new(Arc::clone(&pool)));
     let auth_service = Arc::new(AuthService::new(
         Arc::clone(&user_repo),
         secret_key,
@@ -65,18 +132,40 @@ async fn main() {
         pool,
         auth_service,
         user_repo,
+        project_repo,
+        ticket_repo,
     };
 
     // Build router
-    let app = Router::new()
-        // Health check
+    // Public routes (no auth required)
+    let public_routes = Router::new()
         .route("/health", get(health_check))
-
-        // Authentication
         .route("/api/auth/register", post(register))
-        .route("/api/auth/login", post(login))
+        .route("/api/auth/login", post(login));
 
-        // Apply middleware
+    // Protected routes (auth required)
+    let protected_routes = Router::new()
+        // Projects
+        .route("/api/projects", get(list_projects).post(create_project))
+        .route(
+            "/api/projects/:id",
+            get(get_project).put(update_project).delete(delete_project),
+        )
+        .route("/api/projects/:id/archive", post(archive_project))
+        // Tickets
+        .route("/api/tickets", get(list_tickets).post(create_ticket))
+        .route(
+            "/api/tickets/:id",
+            get(get_ticket).put(update_ticket).delete(delete_ticket),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    // Combine routes and apply global middleware
+    let app = public_routes
+        .merge(protected_routes)
         .layer(CorsLayer::permissive()) // TODO: Configure CORS properly
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -203,6 +292,427 @@ async fn login(
         user: user.into(),
         token: token.token,
     }))
+}
+
+// ============================================================================
+// Project Routes
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct ProjectDto {
+    id: String,
+    name: String,
+    description: Option<String>,
+    color: Option<String>,
+    archived: bool,
+    created_by: String,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<Project> for ProjectDto {
+    fn from(project: Project) -> Self {
+        Self {
+            id: project.id.to_string(),
+            name: project.name,
+            description: project.description,
+            color: project.color,
+            archived: project.archived,
+            created_by: project.created_by.to_string(),
+            created_at: project.created_at.to_rfc3339(),
+            updated_at: project.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+async fn list_projects(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ProjectDto>>, AppError> {
+    let projects = state
+        .project_repo
+        .find_all()
+        .map_err(|e| {
+            tracing::error!("Failed to list projects: {:?}", e);
+            AppError::Internal("Failed to retrieve projects".to_string())
+        })?;
+
+    Ok(Json(projects.into_iter().map(ProjectDto::from).collect()))
+}
+
+async fn get_project(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ProjectDto>, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    let project = state
+        .project_repo
+        .find_by_id(project_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get project: {:?}", e);
+            AppError::Internal("Failed to retrieve project".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Project not found".to_string()))?;
+
+    Ok(Json(project.into()))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateProjectRequest {
+    name: String,
+    description: Option<String>,
+}
+
+async fn create_project(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<CreateProjectRequest>,
+) -> Result<Json<ProjectDto>, AppError> {
+    let mut project = Project::new(req.name, user.id);
+    project.description = req.description;
+
+    // Validate
+    project.validate().map_err(|e| {
+        tracing::error!("Project validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let created_project = state
+        .project_repo
+        .create(&project)
+        .map_err(|e| {
+            tracing::error!("Failed to create project: {:?}", e);
+            AppError::Internal("Failed to create project".to_string())
+        })?;
+
+    Ok(Json(created_project.into()))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateProjectRequest {
+    name: Option<String>,
+    description: Option<String>,
+}
+
+async fn update_project(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateProjectRequest>,
+) -> Result<Json<ProjectDto>, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    let mut project = state
+        .project_repo
+        .find_by_id(project_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get project: {:?}", e);
+            AppError::Internal("Failed to retrieve project".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Project not found".to_string()))?;
+
+    // Update fields if provided
+    if let Some(name) = req.name {
+        project.name = name;
+    }
+    if let Some(description) = req.description {
+        project.description = Some(description);
+    }
+
+    // Validate
+    project.validate().map_err(|e| {
+        tracing::error!("Project validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let updated_project = state
+        .project_repo
+        .update(&project)
+        .map_err(|e| {
+            tracing::error!("Failed to update project: {:?}", e);
+            AppError::Internal("Failed to update project".to_string())
+        })?;
+
+    Ok(Json(updated_project.into()))
+}
+
+async fn delete_project(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    state
+        .project_repo
+        .delete(project_id)
+        .map_err(|e| {
+            tracing::error!("Failed to delete project: {:?}", e);
+            match e {
+                DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
+                _ => AppError::Internal("Failed to delete project".to_string()),
+            }
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn archive_project(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ProjectDto>, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    let archived_project = state
+        .project_repo
+        .archive(project_id)
+        .map_err(|e| {
+            tracing::error!("Failed to archive project: {:?}", e);
+            match e {
+                DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
+                _ => AppError::Internal("Failed to archive project".to_string()),
+            }
+        })?;
+
+    Ok(Json(archived_project.into()))
+}
+
+// ============================================================================
+// Ticket Routes
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct TicketDto {
+    id: String,
+    project_id: String,
+    title: String,
+    description: Option<String>,
+    ticket_type: String,
+    status: String,
+    priority: String,
+    assignee_id: Option<String>,
+    created_by: String,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<Ticket> for TicketDto {
+    fn from(ticket: Ticket) -> Self {
+        Self {
+            id: ticket.id.to_string(),
+            project_id: ticket.project_id.to_string(),
+            title: ticket.title,
+            description: ticket.description,
+            ticket_type: format!("{:?}", ticket.ticket_type),
+            status: format!("{:?}", ticket.status),
+            priority: format!("{:?}", ticket.priority),
+            assignee_id: ticket.assignee_id.map(|id| id.to_string()),
+            created_by: ticket.created_by.to_string(),
+            created_at: ticket.created_at.to_rfc3339(),
+            updated_at: ticket.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+async fn list_tickets(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<TicketDto>>, AppError> {
+    let tickets = state
+        .ticket_repo
+        .find_all()
+        .map_err(|e| {
+            tracing::error!("Failed to list tickets: {:?}", e);
+            AppError::Internal("Failed to retrieve tickets".to_string())
+        })?;
+
+    Ok(Json(tickets.into_iter().map(TicketDto::from).collect()))
+}
+
+async fn get_ticket(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<TicketDto>, AppError> {
+    let ticket_id = TicketId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    let ticket = state
+        .ticket_repo
+        .find_by_id(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get ticket: {:?}", e);
+            AppError::Internal("Failed to retrieve ticket".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Ticket not found".to_string()))?;
+
+    Ok(Json(ticket.into()))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateTicketRequest {
+    project_id: String,
+    title: String,
+    description: Option<String>,
+    ticket_type: String,
+    priority: Option<String>,
+}
+
+async fn create_ticket(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<CreateTicketRequest>,
+) -> Result<Json<TicketDto>, AppError> {
+    let project_id = ProjectId::from_string(&req.project_id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    let ticket_type = match req.ticket_type.to_lowercase().as_str() {
+        "task" => TicketType::Task,
+        "bug" => TicketType::Bug,
+        "feature" => TicketType::Feature,
+        "epic" => TicketType::Epic,
+        _ => return Err(AppError::BadRequest("Invalid ticket type".to_string())),
+    };
+
+    let mut ticket = Ticket::new(project_id, req.title, ticket_type, user.id);
+    ticket.description = req.description;
+
+    if let Some(priority_str) = req.priority {
+        ticket.priority = match priority_str.to_lowercase().as_str() {
+            "low" => Priority::Low,
+            "medium" => Priority::Medium,
+            "high" => Priority::High,
+            "critical" => Priority::Critical,
+            _ => return Err(AppError::BadRequest("Invalid priority".to_string())),
+        };
+    }
+
+    // Validate
+    ticket.validate().map_err(|e| {
+        tracing::error!("Ticket validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let created_ticket = state
+        .ticket_repo
+        .create(&ticket)
+        .map_err(|e| {
+            tracing::error!("Failed to create ticket: {:?}", e);
+            AppError::Internal("Failed to create ticket".to_string())
+        })?;
+
+    Ok(Json(created_ticket.into()))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateTicketRequest {
+    title: Option<String>,
+    description: Option<String>,
+    status: Option<String>,
+    priority: Option<String>,
+    assignee_id: Option<String>,
+}
+
+async fn update_ticket(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateTicketRequest>,
+) -> Result<Json<TicketDto>, AppError> {
+    let ticket_id = TicketId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    let mut ticket = state
+        .ticket_repo
+        .find_by_id(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to get ticket: {:?}", e);
+            AppError::Internal("Failed to retrieve ticket".to_string())
+        })?
+        .ok_or_else(|| AppError::NotFound("Ticket not found".to_string()))?;
+
+    // Update fields if provided
+    if let Some(title) = req.title {
+        ticket.title = title;
+    }
+    if let Some(description) = req.description {
+        ticket.description = Some(description);
+    }
+    if let Some(status_str) = req.status {
+        ticket.status = match status_str.to_lowercase().as_str() {
+            "open" => TicketStatus::Open,
+            "inprogress" => TicketStatus::InProgress,
+            "review" => TicketStatus::Review,
+            "done" => TicketStatus::Done,
+            "closed" => TicketStatus::Closed,
+            _ => return Err(AppError::BadRequest("Invalid status".to_string())),
+        };
+    }
+    if let Some(priority_str) = req.priority {
+        ticket.priority = match priority_str.to_lowercase().as_str() {
+            "low" => Priority::Low,
+            "medium" => Priority::Medium,
+            "high" => Priority::High,
+            "critical" => Priority::Critical,
+            _ => return Err(AppError::BadRequest("Invalid priority".to_string())),
+        };
+    }
+    if let Some(assignee_id_str) = req.assignee_id {
+        if assignee_id_str.is_empty() {
+            ticket.assignee_id = None;
+        } else {
+            use worknest_core::models::UserId;
+            ticket.assignee_id = Some(
+                UserId::from_string(&assignee_id_str)
+                    .map_err(|_| AppError::BadRequest("Invalid assignee ID".to_string()))?,
+            );
+        }
+    }
+
+    // Validate
+    ticket.validate().map_err(|e| {
+        tracing::error!("Ticket validation failed: {:?}", e);
+        AppError::BadRequest(e.to_string())
+    })?;
+
+    let updated_ticket = state
+        .ticket_repo
+        .update(&ticket)
+        .map_err(|e| {
+            tracing::error!("Failed to update ticket: {:?}", e);
+            AppError::Internal("Failed to update ticket".to_string())
+        })?;
+
+    Ok(Json(updated_ticket.into()))
+}
+
+async fn delete_ticket(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let ticket_id = TicketId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
+
+    state
+        .ticket_repo
+        .delete(ticket_id)
+        .map_err(|e| {
+            tracing::error!("Failed to delete ticket: {:?}", e);
+            match e {
+                DbError::NotFound(_) => AppError::NotFound("Ticket not found".to_string()),
+                _ => AppError::Internal("Failed to delete ticket".to_string()),
+            }
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ============================================================================

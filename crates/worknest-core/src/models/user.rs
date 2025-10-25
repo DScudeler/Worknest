@@ -18,6 +18,13 @@ impl UserId {
     pub fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
+
+    /// Parse from a string
+    pub fn from_string(s: &str) -> crate::Result<Self> {
+        Ok(Self(
+            Uuid::parse_str(s).map_err(|e| crate::CoreError::InvalidId(e.to_string()))?,
+        ))
+    }
 }
 
 impl Default for UserId {

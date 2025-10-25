@@ -89,8 +89,8 @@ impl ProjectRepository {
         Ok(projects)
     }
 
-    /// Archive a project
-    pub fn archive(&self, project_id: ProjectId) -> Result<()> {
+    /// Archive a project and return the updated project
+    pub fn archive(&self, project_id: ProjectId) -> Result<Project> {
         let conn = self
             .pool
             .get()
@@ -107,7 +107,9 @@ impl ProjectRepository {
             return Err(DbError::NotFound("Project not found".to_string()));
         }
 
-        Ok(())
+        // Fetch and return the updated project
+        self.find_by_id(project_id)?
+            .ok_or_else(|| DbError::NotFound("Project not found after archive".to_string()))
     }
 
     /// Unarchive a project
