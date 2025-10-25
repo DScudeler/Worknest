@@ -10,10 +10,10 @@ use std::sync::Arc;
 use axum::{
     body::Bytes,
     extract::{Multipart, Path, Request, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -33,8 +33,10 @@ use worknest_db::{
 /// Shared application state
 #[derive(Clone)]
 struct AppState {
+    #[allow(dead_code)]
     pool: Arc<DbPool>,
     auth_service: Arc<AuthService>,
+    #[allow(dead_code)]
     user_repo: Arc<UserRepository>,
     project_repo: Arc<ProjectRepository>,
     ticket_repo: Arc<TicketRepository>,
@@ -65,13 +67,10 @@ async fn auth_middleware(
         .ok_or_else(|| AppError::Unauthorized("Invalid Authorization header format".to_string()))?;
 
     // Verify token and get user
-    let user = state
-        .auth_service
-        .get_user_from_token(token)
-        .map_err(|e| {
-            tracing::warn!("Token verification failed: {:?}", e);
-            AppError::Unauthorized("Invalid or expired token".to_string())
-        })?;
+    let user = state.auth_service.get_user_from_token(token).map_err(|e| {
+        tracing::warn!("Token verification failed: {:?}", e);
+        AppError::Unauthorized("Invalid or expired token".to_string())
+    })?;
 
     // Attach user to request extensions for handlers to use
     request.extensions_mut().insert(user);
@@ -357,13 +356,10 @@ async fn list_projects(
     AuthUser(_user): AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ProjectDto>>, AppError> {
-    let projects = state
-        .project_repo
-        .find_all()
-        .map_err(|e| {
-            tracing::error!("Failed to list projects: {:?}", e);
-            AppError::Internal("Failed to retrieve projects".to_string())
-        })?;
+    let projects = state.project_repo.find_all().map_err(|e| {
+        tracing::error!("Failed to list projects: {:?}", e);
+        AppError::Internal("Failed to retrieve projects".to_string())
+    })?;
 
     Ok(Json(projects.into_iter().map(ProjectDto::from).collect()))
 }
@@ -408,13 +404,10 @@ async fn create_project(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let created_project = state
-        .project_repo
-        .create(&project)
-        .map_err(|e| {
-            tracing::error!("Failed to create project: {:?}", e);
-            AppError::Internal("Failed to create project".to_string())
-        })?;
+    let created_project = state.project_repo.create(&project).map_err(|e| {
+        tracing::error!("Failed to create project: {:?}", e);
+        AppError::Internal("Failed to create project".to_string())
+    })?;
 
     Ok(Json(created_project.into()))
 }
@@ -457,13 +450,10 @@ async fn update_project(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let updated_project = state
-        .project_repo
-        .update(&project)
-        .map_err(|e| {
-            tracing::error!("Failed to update project: {:?}", e);
-            AppError::Internal("Failed to update project".to_string())
-        })?;
+    let updated_project = state.project_repo.update(&project).map_err(|e| {
+        tracing::error!("Failed to update project: {:?}", e);
+        AppError::Internal("Failed to update project".to_string())
+    })?;
 
     Ok(Json(updated_project.into()))
 }
@@ -476,16 +466,13 @@ async fn delete_project(
     let project_id = ProjectId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
 
-    state
-        .project_repo
-        .delete(project_id)
-        .map_err(|e| {
-            tracing::error!("Failed to delete project: {:?}", e);
-            match e {
-                DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
-                _ => AppError::Internal("Failed to delete project".to_string()),
-            }
-        })?;
+    state.project_repo.delete(project_id).map_err(|e| {
+        tracing::error!("Failed to delete project: {:?}", e);
+        match e {
+            DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
+            _ => AppError::Internal("Failed to delete project".to_string()),
+        }
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -498,16 +485,13 @@ async fn archive_project(
     let project_id = ProjectId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
 
-    let archived_project = state
-        .project_repo
-        .archive(project_id)
-        .map_err(|e| {
-            tracing::error!("Failed to archive project: {:?}", e);
-            match e {
-                DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
-                _ => AppError::Internal("Failed to archive project".to_string()),
-            }
-        })?;
+    let archived_project = state.project_repo.archive(project_id).map_err(|e| {
+        tracing::error!("Failed to archive project: {:?}", e);
+        match e {
+            DbError::NotFound(_) => AppError::NotFound("Project not found".to_string()),
+            _ => AppError::Internal("Failed to archive project".to_string()),
+        }
+    })?;
 
     Ok(Json(archived_project.into()))
 }
@@ -553,13 +537,10 @@ async fn list_tickets(
     AuthUser(_user): AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<TicketDto>>, AppError> {
-    let tickets = state
-        .ticket_repo
-        .find_all()
-        .map_err(|e| {
-            tracing::error!("Failed to list tickets: {:?}", e);
-            AppError::Internal("Failed to retrieve tickets".to_string())
-        })?;
+    let tickets = state.ticket_repo.find_all().map_err(|e| {
+        tracing::error!("Failed to list tickets: {:?}", e);
+        AppError::Internal("Failed to retrieve tickets".to_string())
+    })?;
 
     Ok(Json(tickets.into_iter().map(TicketDto::from).collect()))
 }
@@ -628,13 +609,10 @@ async fn create_ticket(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let created_ticket = state
-        .ticket_repo
-        .create(&ticket)
-        .map_err(|e| {
-            tracing::error!("Failed to create ticket: {:?}", e);
-            AppError::Internal("Failed to create ticket".to_string())
-        })?;
+    let created_ticket = state.ticket_repo.create(&ticket).map_err(|e| {
+        tracing::error!("Failed to create ticket: {:?}", e);
+        AppError::Internal("Failed to create ticket".to_string())
+    })?;
 
     Ok(Json(created_ticket.into()))
 }
@@ -710,13 +688,10 @@ async fn update_ticket(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let updated_ticket = state
-        .ticket_repo
-        .update(&ticket)
-        .map_err(|e| {
-            tracing::error!("Failed to update ticket: {:?}", e);
-            AppError::Internal("Failed to update ticket".to_string())
-        })?;
+    let updated_ticket = state.ticket_repo.update(&ticket).map_err(|e| {
+        tracing::error!("Failed to update ticket: {:?}", e);
+        AppError::Internal("Failed to update ticket".to_string())
+    })?;
 
     Ok(Json(updated_ticket.into()))
 }
@@ -729,16 +704,13 @@ async fn delete_ticket(
     let ticket_id = TicketId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
 
-    state
-        .ticket_repo
-        .delete(ticket_id)
-        .map_err(|e| {
-            tracing::error!("Failed to delete ticket: {:?}", e);
-            match e {
-                DbError::NotFound(_) => AppError::NotFound("Ticket not found".to_string()),
-                _ => AppError::Internal("Failed to delete ticket".to_string()),
-            }
-        })?;
+    state.ticket_repo.delete(ticket_id).map_err(|e| {
+        tracing::error!("Failed to delete ticket: {:?}", e);
+        match e {
+            DbError::NotFound(_) => AppError::NotFound("Ticket not found".to_string()),
+            _ => AppError::Internal("Failed to delete ticket".to_string()),
+        }
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -778,13 +750,10 @@ async fn list_comments_for_ticket(
     let ticket_id = TicketId::from_string(&ticket_id)
         .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
 
-    let comments = state
-        .comment_repo
-        .find_by_ticket(ticket_id)
-        .map_err(|e| {
-            tracing::error!("Failed to list comments: {:?}", e);
-            AppError::Internal("Failed to retrieve comments".to_string())
-        })?;
+    let comments = state.comment_repo.find_by_ticket(ticket_id).map_err(|e| {
+        tracing::error!("Failed to list comments: {:?}", e);
+        AppError::Internal("Failed to retrieve comments".to_string())
+    })?;
 
     Ok(Json(comments.into_iter().map(CommentDto::from).collect()))
 }
@@ -811,13 +780,10 @@ async fn create_comment(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let created_comment = state
-        .comment_repo
-        .create(&comment)
-        .map_err(|e| {
-            tracing::error!("Failed to create comment: {:?}", e);
-            AppError::Internal("Failed to create comment".to_string())
-        })?;
+    let created_comment = state.comment_repo.create(&comment).map_err(|e| {
+        tracing::error!("Failed to create comment: {:?}", e);
+        AppError::Internal("Failed to create comment".to_string())
+    })?;
 
     Ok(Json(created_comment.into()))
 }
@@ -853,13 +819,10 @@ async fn update_comment(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let updated_comment = state
-        .comment_repo
-        .update(&comment)
-        .map_err(|e| {
-            tracing::error!("Failed to update comment: {:?}", e);
-            AppError::Internal("Failed to update comment".to_string())
-        })?;
+    let updated_comment = state.comment_repo.update(&comment).map_err(|e| {
+        tracing::error!("Failed to update comment: {:?}", e);
+        AppError::Internal("Failed to update comment".to_string())
+    })?;
 
     Ok(Json(updated_comment.into()))
 }
@@ -872,16 +835,13 @@ async fn delete_comment(
     let comment_id = CommentId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid comment ID".to_string()))?;
 
-    state
-        .comment_repo
-        .delete(comment_id)
-        .map_err(|e| {
-            tracing::error!("Failed to delete comment: {:?}", e);
-            match e {
-                DbError::NotFound(_) => AppError::NotFound("Comment not found".to_string()),
-                _ => AppError::Internal("Failed to delete comment".to_string()),
-            }
-        })?;
+    state.comment_repo.delete(comment_id).map_err(|e| {
+        tracing::error!("Failed to delete comment: {:?}", e);
+        match e {
+            DbError::NotFound(_) => AppError::NotFound("Comment not found".to_string()),
+            _ => AppError::Internal("Failed to delete comment".to_string()),
+        }
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -955,16 +915,13 @@ async fn delete_attachment(
         .ok_or_else(|| AppError::NotFound("Attachment not found".to_string()))?;
 
     // Delete from database
-    state
-        .attachment_repo
-        .delete(attachment_id)
-        .map_err(|e| {
-            tracing::error!("Failed to delete attachment: {:?}", e);
-            match e {
-                DbError::NotFound(_) => AppError::NotFound("Attachment not found".to_string()),
-                _ => AppError::Internal("Failed to delete attachment".to_string()),
-            }
-        })?;
+    state.attachment_repo.delete(attachment_id).map_err(|e| {
+        tracing::error!("Failed to delete attachment: {:?}", e);
+        match e {
+            DbError::NotFound(_) => AppError::NotFound("Attachment not found".to_string()),
+            _ => AppError::Internal("Failed to delete attachment".to_string()),
+        }
+    })?;
 
     // Delete file from disk (ignore errors if file doesn't exist)
     let _ = fs::remove_file(&attachment.file_path);
@@ -1011,9 +968,10 @@ async fn upload_attachment(
 
         if field_name == "file" {
             filename = field.file_name().map(|s| s.to_string());
-            file_data = Some(field.bytes().await.map_err(|e| {
-                AppError::BadRequest(format!("Failed to read file data: {}", e))
-            })?);
+            file_data =
+                Some(field.bytes().await.map_err(|e| {
+                    AppError::BadRequest(format!("Failed to read file data: {}", e))
+                })?);
         }
     }
 
@@ -1071,15 +1029,12 @@ async fn upload_attachment(
         AppError::BadRequest(e.to_string())
     })?;
 
-    let created_attachment = state
-        .attachment_repo
-        .create(&attachment)
-        .map_err(|e| {
-            tracing::error!("Failed to create attachment: {:?}", e);
-            // Clean up file on database error
-            let _ = fs::remove_file(&file_path);
-            AppError::Internal("Failed to create attachment".to_string())
-        })?;
+    let created_attachment = state.attachment_repo.create(&attachment).map_err(|e| {
+        tracing::error!("Failed to create attachment: {:?}", e);
+        // Clean up file on database error
+        let _ = fs::remove_file(&file_path);
+        AppError::Internal("Failed to create attachment".to_string())
+    })?;
 
     Ok(Json(created_attachment.into()))
 }
