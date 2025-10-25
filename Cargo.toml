@@ -41,7 +41,7 @@ r2d2_sqlite = "0.23"
 refinery = { version = "0.8", features = ["rusqlite"] }
 
 # Authentication
-bcrypt = "0.15"
+bcrypt = "0.17"
 jsonwebtoken = "9.2"
 rand = "0.8"
 
