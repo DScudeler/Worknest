@@ -32,7 +32,7 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # Validation
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 
 # Database
 rusqlite = { version = "0.30", features = ["bundled", "chrono", "uuid"] }
