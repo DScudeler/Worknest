@@ -3,6 +3,7 @@
 //! Web application for Worknest built with egui.
 //! Runs in the browser with responsive UI for desktop and mobile.
 
+use wasm_bindgen::JsCast;
 use eframe::egui;
 use worknest_gui::{
     api_client::ApiClient,
@@ -23,12 +24,24 @@ fn main() {
 
     tracing::info!("Starting Worknest (Web)");
 
+    // Get the canvas element from the DOM
+    let document = web_sys::window()
+        .expect("No window found")
+        .document()
+        .expect("No document found");
+    
+    let canvas = document
+        .get_element_by_id("worknest_canvas")
+        .expect("Failed to find worknest_canvas element")
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .expect("worknest_canvas is not a canvas element");
+
     let web_options = eframe::WebOptions::default();
 
-    wasm_bindgen_futures::spawn_local(async {
+    wasm_bindgen_futures::spawn_local(async move {
         eframe::WebRunner::new()
             .start(
-                "worknest_canvas",
+                canvas,
                 web_options,
                 Box::new(|cc| Ok(Box::new(WorknestApp::new(cc)) as Box<dyn eframe::App>)),
             )

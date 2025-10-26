@@ -111,21 +111,41 @@ impl LoginScreen {
             return;
         }
 
-        // TODO: Implement API client login
-        // This should call state.api_client.login(&self.username, &self.password)
-        // For now, show a message that API integration is needed
-        self.error_message = Some("API integration in progress. Login will be available soon.".to_string());
-
-        // Demo mode: For development, you can uncomment this to bypass login
-        // use worknest_core::models::User;
-        // use uuid::Uuid;
-        // let demo_user = User {
-        //     id: Uuid::new_v4(),
-        //     username: self.username.clone(),
-        //     email: format!("{}@example.com", self.username),
-        //     created_at: chrono::Utc::now(),
-        //     updated_at: chrono::Utc::now(),
+        // Demo mode: Create a demo user for local development
+        // TODO: Replace with real API call when backend is available
+        // let api_client = state.api_client.clone();
+        // let request = LoginRequest {
+        //     username_or_email: self.username.clone(),
+        //     password: self.password.clone(),
         // };
-        // state.login(demo_user, "demo_token".to_string());
+        // wasm_bindgen_futures::spawn_local(async move {
+        //     match api_client.login(request).await {
+        //         Ok(response) => { /* handle success */ },
+        //         Err(e) => { /* handle error */ },
+        //     }
+        // });
+
+        use worknest_core::models::User;
+        use worknest_core::models::UserId;
+
+        let demo_user = User {
+            id: UserId::new(),
+            username: self.username.clone(),
+            email: format!("{}@example.com", self.username),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        // Store in browser storage
+        use gloo_storage::{LocalStorage, Storage};
+        let _ = LocalStorage::set("auth_token", "demo_token");
+        let _ = LocalStorage::set("current_user", &demo_user);
+
+        state.login(demo_user, "demo_token".to_string());
+        state.notify_success("Login successful! (Demo Mode)".to_string());
+
+        // Clear form
+        self.username.clear();
+        self.password.clear();
     }
 }

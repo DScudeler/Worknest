@@ -329,8 +329,8 @@ impl TicketDetailScreen {
         state.notify_info("API integration in progress".to_string());
     }
 
-    fn load_data(&mut self, _state: &AppState) {
-        // TODO: API find ticket
-        self.ticket = None;
+    fn load_data(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
+        self.ticket = state.demo_tickets.iter().find(|t| t.id == self.ticket_id).cloned();
     }
 }

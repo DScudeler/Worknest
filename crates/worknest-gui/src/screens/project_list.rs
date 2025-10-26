@@ -178,12 +178,20 @@ impl ProjectListScreen {
 
                     if project.archived {
                         if ui.button("Unarchive").clicked() {
-                            // TODO: Implement API client unarchive
-                            state.notify_info("API integration in progress".to_string());
+                            // Demo mode: Update in-memory state
+                            if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                                p.archived = false;
+                                state.notify_success("Project unarchived".to_string());
+                                self.load_projects(state);
+                            }
                         }
                     } else if ui.button("Archive").clicked() {
-                        // TODO: Implement API client archive
-                        state.notify_info("API integration in progress".to_string());
+                        // Demo mode: Update in-memory state
+                        if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                            p.archived = true;
+                            state.notify_success("Project archived".to_string());
+                            self.load_projects(state);
+                        }
                     }
                 });
             });
@@ -264,19 +272,12 @@ impl ProjectListScreen {
                 project.color = Some(self.new_project_color.clone());
             }
 
-            // TODO: Implement API client create project
-            // match state.api_client.create_project(&project).await {
-            //     Ok(_) => {
-            //         state.notify_success("Project created successfully".to_string());
-            //         self.show_create_dialog = false;
-            //         self.clear_create_form();
-            //         self.load_projects(state);
-            //     },
-            //     Err(e) => {
-            //         state.notify_error(format!("Failed to create project: {:?}", e));
-            //     },
-            // }
-            state.notify_info("API integration in progress".to_string());
+            // Demo mode: Add to in-memory state
+            state.demo_projects.push(project);
+            state.notify_success("Project created successfully (Demo Mode)".to_string());
+            self.show_create_dialog = false;
+            self.clear_create_form();
+            self.load_projects(state);
         }
     }
 
@@ -286,10 +287,10 @@ impl ProjectListScreen {
         self.new_project_color = String::from("#3B82F6");
     }
 
-    fn load_projects(&mut self, _state: &AppState) {
-        // TODO: Load projects from API
-        // This should call state.api_client.get_projects()
-        self.projects = Vec::new();
+    fn load_projects(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
+        // TODO: Replace with API call when backend is available
+        self.projects = state.demo_projects.clone();
     }
 }
 

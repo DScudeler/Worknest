@@ -2,7 +2,7 @@
 
 use crate::api_client::ApiClient;
 use crate::screens::Screen;
-use worknest_core::models::User;
+use worknest_core::models::{Project, Ticket, User};
 
 /// Main application state
 #[derive(Clone)]
@@ -19,6 +19,10 @@ pub struct AppState {
     pub notifications: Vec<Notification>,
     /// Loading state
     pub is_loading: bool,
+    /// Demo projects (for local development without backend)
+    pub demo_projects: Vec<Project>,
+    /// Demo tickets (for local development without backend)
+    pub demo_tickets: Vec<Ticket>,
 }
 
 impl AppState {
@@ -31,6 +35,8 @@ impl AppState {
             api_client,
             notifications: Vec::new(),
             is_loading: false,
+            demo_projects: Vec::new(),
+            demo_tickets: Vec::new(),
         }
     }
 

@@ -184,10 +184,19 @@ impl DashboardScreen {
         });
     }
 
-    fn load_data(&mut self, _state: &AppState) {
-        // TODO: Load recent projects from API
-        // This should call state.api_client.get_projects()
-        self.recent_projects = Vec::new();
+    fn load_data(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
+        // TODO: Replace with API call when backend is available
+        // wasm_bindgen_futures::spawn_local(async move {
+        //     if let Some(token) = &state.auth_token {
+        //         match state.api_client.get_projects(token).await {
+        //             Ok(projects) => { /* update state */ },
+        //             Err(e) => { /* handle error */ },
+        //         }
+        //     }
+        // });
+
+        self.recent_projects = state.demo_projects.clone();
     }
 }
 

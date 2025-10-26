@@ -161,9 +161,45 @@ impl RegisterScreen {
             return;
         }
 
-        // TODO: Implement API client registration
-        // This should call state.api_client.register(&self.username, &self.email, &self.password)
-        // For now, show a message that API integration is needed
-        self.error_message = Some("API integration in progress. Registration will be available soon.".to_string());
+        // Demo mode: Create a demo user and auto-login
+        // TODO: Replace with real API call when backend is available
+        // let api_client = state.api_client.clone();
+        // let request = RegisterRequest {
+        //     username: self.username.clone(),
+        //     email: self.email.clone(),
+        //     password: self.password.clone(),
+        //     full_name: None,
+        // };
+        // wasm_bindgen_futures::spawn_local(async move {
+        //     match api_client.register(request).await {
+        //         Ok(response) => { /* handle success */ },
+        //         Err(e) => { /* handle error */ },
+        //     }
+        // });
+
+        use worknest_core::models::User;
+        use worknest_core::models::UserId;
+
+        let demo_user = User {
+            id: UserId::new(),
+            username: self.username.clone(),
+            email: self.email.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        // Store in browser storage
+        use gloo_storage::{LocalStorage, Storage};
+        let _ = LocalStorage::set("auth_token", "demo_token");
+        let _ = LocalStorage::set("current_user", &demo_user);
+
+        state.login(demo_user, "demo_token".to_string());
+        state.notify_success("Account created successfully! (Demo Mode)".to_string());
+
+        // Clear form
+        self.username.clear();
+        self.email.clear();
+        self.password.clear();
+        self.confirm_password.clear();
     }
 }

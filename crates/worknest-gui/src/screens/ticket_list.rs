@@ -324,17 +324,12 @@ impl TicketListScreen {
 
             ticket.priority = self.new_ticket_priority;
 
-            match Err(anyhow::anyhow!("TODO: API create")) {
-                Ok(_) => {
-                    state.notify_success("Ticket created successfully".to_string());
-                    self.show_create_dialog = false;
-                    self.clear_create_form();
-                    self.load_tickets(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to create ticket: {:?}", e));
-                },
-            }
+            // Demo mode: Add to in-memory state
+            state.demo_tickets.push(ticket);
+            state.notify_success("Ticket created successfully (Demo Mode)".to_string());
+            self.show_create_dialog = false;
+            self.clear_create_form();
+            self.load_tickets(state);
         }
     }
 
@@ -346,13 +341,11 @@ impl TicketListScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
         self.tickets = if let Some(project_id) = self.project_id {
-            state
-                .ticket_repo
-                .find_by_project(project_id)
-                .unwrap_or_default()
+            state.demo_tickets.iter().filter(|t| t.project_id == project_id).cloned().collect()
         } else {
-            Ok(Vec::new()) // TODO: API find all.unwrap_or_default()
+            state.demo_tickets.clone()
         };
     }
 }

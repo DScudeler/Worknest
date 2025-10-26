@@ -172,6 +172,46 @@ impl ApiClient {
         }
     }
 
+    pub async fn archive_project(&self, token: &str, id: Uuid) -> Result<Project> {
+        let response = self
+            .client
+            .put(&self.api_url(&format!("/projects/{}", id)))
+            .bearer_auth(token)
+            .json(&UpdateProjectRequest {
+                name: None,
+                description: None,
+                is_archived: Some(true),
+            })
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to archive project: {}", response.status()))
+        }
+    }
+
+    pub async fn unarchive_project(&self, token: &str, id: Uuid) -> Result<Project> {
+        let response = self
+            .client
+            .put(&self.api_url(&format!("/projects/{}", id)))
+            .bearer_auth(token)
+            .json(&UpdateProjectRequest {
+                name: None,
+                description: None,
+                is_archived: Some(false),
+            })
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to unarchive project: {}", response.status()))
+        }
+    }
+
     // Ticket endpoints
     pub async fn get_tickets(&self, token: &str, project_id: Option<Uuid>) -> Result<Vec<Ticket>> {
         let url = if let Some(pid) = project_id {

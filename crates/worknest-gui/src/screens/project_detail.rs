@@ -310,12 +310,12 @@ impl ProjectDetailScreen {
         }
     }
 
-    fn load_data(&mut self, _state: &AppState) {
-        // TODO: API find project
-        self.project = None;
+    fn load_data(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
+        self.project = state.demo_projects.iter().find(|p| p.id == self.project_id).cloned();
 
-        // TODO: API find tickets
-        self.tickets = Vec::new();
+        // Load associated tickets
+        self.tickets = state.demo_tickets.iter().filter(|t| t.project_id == self.project_id).cloned().collect();
     }
 }
 

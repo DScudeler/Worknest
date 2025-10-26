@@ -158,8 +158,8 @@ impl TicketBoardScreen {
         });
     }
 
-    fn load_tickets(&mut self, _state: &AppState) {
-        // TODO: API find tickets
-        self.tickets = Vec::new();
+    fn load_tickets(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
+        self.tickets = state.demo_tickets.iter().filter(|t| t.project_id == self.project_id).cloned().collect();
     }
 }
