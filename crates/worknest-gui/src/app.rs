@@ -246,23 +246,18 @@ pub fn start() {
 
     tracing::info!("Starting Worknest (Web)");
 
-    // Get the canvas element from the DOM or create one
+    // Get the canvas element from the DOM
     let document = web_sys::window()
         .expect("No window found")
         .document()
         .expect("No document found");
 
-    // Try to create a canvas dynamically
-    let body = document.body().expect("No body element");
-
+    // Get the existing canvas element
     let canvas = document
-        .create_element("canvas")
-        .expect("Failed to create canvas")
+        .get_element_by_id("worknest_canvas")
+        .expect("Canvas element 'worknest_canvas' not found in HTML")
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .expect("Failed to cast to canvas");
-
-    canvas.set_id("worknest_canvas");
-    body.append_child(&canvas).expect("Failed to append canvas");
 
     let web_options = eframe::WebOptions::default();
 

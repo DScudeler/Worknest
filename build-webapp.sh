@@ -89,7 +89,7 @@ cat > "$DIST_DIR/index.html" << 'EOF'
             margin: 20px auto;
         }
 
-        canvas {
+        #worknest_canvas {
             width: 100%;
             height: 100%;
         }
@@ -101,6 +101,8 @@ cat > "$DIST_DIR/index.html" << 'EOF'
         <div>Loading Worknest...</div>
     </div>
     <div id="error"></div>
+
+    <canvas id="worknest_canvas"></canvas>
 
     <script type="module">
         import init from './worknest_gui.js';
