@@ -161,45 +161,9 @@ impl RegisterScreen {
             return;
         }
 
-        state.is_loading = true;
-
-        // Attempt registration
-        match state
-            .auth_service
-            .register(&self.username, &self.email, &self.password)
-        {
-            Ok(user) => {
-                // Auto-login after registration
-                match state.auth_service.login(&self.username, &self.password) {
-                    Ok(token) => {
-                        state.login(user, token);
-                        state.notify_success("Account created successfully!".to_string());
-
-                        // Clear form
-                        self.username.clear();
-                        self.email.clear();
-                        self.password.clear();
-                        self.confirm_password.clear();
-                        self.error_message = None;
-                    },
-                    Err(_) => {
-                        // Registration succeeded but login failed, navigate to login
-                        state.notify_success("Account created! Please login.".to_string());
-                        state.navigate_to(Screen::Login);
-                    },
-                }
-            },
-            Err(e) => {
-                self.error_message = Some(match e {
-                    worknest_auth::AuthError::UserExists => {
-                        "Username or email already exists".to_string()
-                    },
-                    worknest_auth::AuthError::PasswordValidation(msg) => msg,
-                    _ => "Registration failed. Please try again.".to_string(),
-                });
-            },
-        }
-
-        state.is_loading = false;
+        // TODO: Implement API client registration
+        // This should call state.api_client.register(&self.username, &self.email, &self.password)
+        // For now, show a message that API integration is needed
+        self.error_message = Some("API integration in progress. Registration will be available soon.".to_string());
     }
 }

@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::{Priority, ProjectId, Ticket, TicketStatus, TicketType};
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -325,7 +324,7 @@ impl TicketListScreen {
 
             ticket.priority = self.new_ticket_priority;
 
-            match state.ticket_repo.create(&ticket) {
+            match Err(anyhow::anyhow!("TODO: API create")) {
                 Ok(_) => {
                     state.notify_success("Ticket created successfully".to_string());
                     self.show_create_dialog = false;
@@ -353,7 +352,7 @@ impl TicketListScreen {
                 .find_by_project(project_id)
                 .unwrap_or_default()
         } else {
-            state.ticket_repo.find_all().unwrap_or_default()
+            Ok(Vec::new()) // TODO: API find all.unwrap_or_default()
         };
     }
 }

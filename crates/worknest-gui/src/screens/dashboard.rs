@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::Project;
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -185,11 +184,10 @@ impl DashboardScreen {
         });
     }
 
-    fn load_data(&mut self, state: &AppState) {
-        // Load recent projects
-        if let Ok(projects) = state.project_repo.find_all() {
-            self.recent_projects = projects;
-        }
+    fn load_data(&mut self, _state: &AppState) {
+        // TODO: Load recent projects from API
+        // This should call state.api_client.get_projects()
+        self.recent_projects = Vec::new();
     }
 }
 

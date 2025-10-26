@@ -111,32 +111,21 @@ impl LoginScreen {
             return;
         }
 
-        state.is_loading = true;
+        // TODO: Implement API client login
+        // This should call state.api_client.login(&self.username, &self.password)
+        // For now, show a message that API integration is needed
+        self.error_message = Some("API integration in progress. Login will be available soon.".to_string());
 
-        // Attempt login
-        match state.auth_service.login(&self.username, &self.password) {
-            Ok(token) => {
-                // Get user from token
-                match state.auth_service.get_user_from_token(&token.token) {
-                    Ok(user) => {
-                        state.login(user, token);
-                        state.notify_success("Login successful!".to_string());
-
-                        // Clear form
-                        self.username.clear();
-                        self.password.clear();
-                        self.error_message = None;
-                    },
-                    Err(e) => {
-                        self.error_message = Some(format!("Failed to get user: {:?}", e));
-                    },
-                }
-            },
-            Err(_e) => {
-                self.error_message = Some("Invalid username or password".to_string());
-            },
-        }
-
-        state.is_loading = false;
+        // Demo mode: For development, you can uncomment this to bypass login
+        // use worknest_core::models::User;
+        // use uuid::Uuid;
+        // let demo_user = User {
+        //     id: Uuid::new_v4(),
+        //     username: self.username.clone(),
+        //     email: format!("{}@example.com", self.username),
+        //     created_at: chrono::Utc::now(),
+        //     updated_at: chrono::Utc::now(),
+        // };
+        // state.login(demo_user, "demo_token".to_string());
     }
 }

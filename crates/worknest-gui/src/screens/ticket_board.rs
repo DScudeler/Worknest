@@ -158,9 +158,8 @@ impl TicketBoardScreen {
         });
     }
 
-    fn load_tickets(&mut self, state: &AppState) {
-        if let Ok(tickets) = state.ticket_repo.find_by_project(self.project_id) {
-            self.tickets = tickets;
-        }
+    fn load_tickets(&mut self, _state: &AppState) {
+        // TODO: API find tickets
+        self.tickets = Vec::new();
     }
 }

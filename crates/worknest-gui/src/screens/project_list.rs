@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::Project;
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -178,17 +177,13 @@ impl ProjectListScreen {
                     }
 
                     if project.archived {
-                        if ui.button("Unarchive").clicked()
-                            && state.project_repo.unarchive(project.id).is_ok()
-                        {
-                            state.notify_success("Project unarchived".to_string());
-                            self.load_projects(state);
+                        if ui.button("Unarchive").clicked() {
+                            // TODO: Implement API client unarchive
+                            state.notify_info("API integration in progress".to_string());
                         }
-                    } else if ui.button("Archive").clicked()
-                        && state.project_repo.archive(project.id).is_ok()
-                    {
-                        state.notify_success("Project archived".to_string());
-                        self.load_projects(state);
+                    } else if ui.button("Archive").clicked() {
+                        // TODO: Implement API client archive
+                        state.notify_info("API integration in progress".to_string());
                     }
                 });
             });
@@ -269,17 +264,19 @@ impl ProjectListScreen {
                 project.color = Some(self.new_project_color.clone());
             }
 
-            match state.project_repo.create(&project) {
-                Ok(_) => {
-                    state.notify_success("Project created successfully".to_string());
-                    self.show_create_dialog = false;
-                    self.clear_create_form();
-                    self.load_projects(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to create project: {:?}", e));
-                },
-            }
+            // TODO: Implement API client create project
+            // match state.api_client.create_project(&project).await {
+            //     Ok(_) => {
+            //         state.notify_success("Project created successfully".to_string());
+            //         self.show_create_dialog = false;
+            //         self.clear_create_form();
+            //         self.load_projects(state);
+            //     },
+            //     Err(e) => {
+            //         state.notify_error(format!("Failed to create project: {:?}", e));
+            //     },
+            // }
+            state.notify_info("API integration in progress".to_string());
         }
     }
 
@@ -289,10 +286,10 @@ impl ProjectListScreen {
         self.new_project_color = String::from("#3B82F6");
     }
 
-    fn load_projects(&mut self, state: &AppState) {
-        if let Ok(projects) = state.project_repo.find_all() {
-            self.projects = projects;
-        }
+    fn load_projects(&mut self, _state: &AppState) {
+        // TODO: Load projects from API
+        // This should call state.api_client.get_projects()
+        self.projects = Vec::new();
     }
 }
 

@@ -88,7 +88,7 @@ impl Styles {
         egui::Frame::default()
             .inner_margin(Spacing::LARGE)
             .outer_margin(Spacing::MEDIUM)
-            .rounding(Rounding::same(8.0))
+            .rounding(Rounding::same(8))
             .stroke(Stroke::new(1.0, Color32::from_gray(200)))
             .fill(Color32::from_gray(250))
     }

@@ -2,32 +2,31 @@
 
 **An open-source project and task manager built for software development teams**
 
-Worknest is a modern, high-performance project management tool built entirely in Rust. It combines the power of a native desktop application with the flexibility of local-first data storage, providing developers with a fast, reliable, and extensible platform for managing projects and tasks.
+Worknest is a modern, high-performance project management tool built entirely in Rust. It provides a responsive web application that works seamlessly on both desktop and mobile browsers, giving developers a fast, reliable, and extensible platform for managing projects and tasks.
 
 ## Features (Planned)
 
 ### MVP (v1.0)
-- Local-first SQLite database
 - User authentication and session management
 - Project management (create, organize, archive)
 - Comprehensive ticket system (tasks, bugs, features)
 - Multiple views: List, Kanban board
 - Priority and status tracking
-- Fast, native desktop UI powered by egui
-- Cross-platform support (Windows, macOS, Linux)
+- Responsive web UI powered by egui
+- Works on desktop and mobile browsers
 
 ### Future Releases
 - **v2.0**: Advanced features (custom fields, workflows, reporting)
 - **v3.0**: Plugin system with WASM-based extensibility
-- **v4.0**: Cloud sync and web application
-- **v5.0+**: AI assistance, mobile apps, advanced integrations
+- **v4.0**: Cloud sync and collaboration features
+- **v5.0+**: AI assistance, progressive web app, advanced integrations
 
 See [ROADMAP.md](./ROADMAP.md) for the complete development plan.
 
 ## Why Worknest?
 
 - **Performance**: Built in Rust for maximum speed and efficiency
-- **Local-First**: Your data stays on your machine, work offline anytime
+- **Responsive**: Works seamlessly on desktop and mobile browsers
 - **Developer-Focused**: Built by developers, for developers
 - **Extensible**: Plugin system for custom integrations (coming in v3.0)
 - **Open Source**: Free forever, community-driven development
@@ -42,8 +41,8 @@ worknest/
 │   ├── worknest-core/       # Core business logic
 │   ├── worknest-db/         # Database layer (SQLite)
 │   ├── worknest-auth/       # Authentication
-│   ├── worknest-api/        # Application API
-│   ├── worknest-gui/        # Desktop UI (egui)
+│   ├── worknest-api/        # Backend API server
+│   ├── worknest-gui/        # Web UI (egui/WASM)
 │   └── worknest-plugins/    # Plugin system (future)
 ```
 
@@ -54,7 +53,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 ### Prerequisites
 
 - Rust 1.70+ (install from [rustup.rs](https://rustup.rs))
-- SQLite 3.35+ (usually pre-installed on most systems)
+- [Trunk](https://trunkrs.dev/) for building the web application (`cargo install trunk`)
+- wasm32 target (`rustup target add wasm32-unknown-unknown`)
 
 ### Building from Source
 
@@ -63,18 +63,19 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 git clone https://github.com/DScudeler/Worknest.git
 cd Worknest
 
-# Build all crates
-cargo build --release
+# Build the web application
+trunk build --release
 
-# Run the desktop application
-cargo run --release -p worknest-gui
+# The built files will be in the dist/ directory
 ```
 
 ### Development
 
 ```bash
-# Run in development mode
-cargo run -p worknest-gui
+# Run the web application in development mode with hot reload
+trunk serve
+
+# The application will be available at http://127.0.0.1:8080
 
 # Run tests
 cargo test --workspace
@@ -83,7 +84,7 @@ cargo test --workspace
 cargo fmt --check
 
 # Run linter
-cargo clippy -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 ## Project Status
@@ -129,12 +130,14 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) (coming soon) for detailed guidelines.
 ## Technology Stack
 
 - **Language**: Rust 🦀
-- **GUI**: egui (immediate mode GUI)
-- **Database**: SQLite with rusqlite/sqlx
+- **Frontend**: egui (immediate mode GUI) + WASM
+- **Backend**: Axum web framework
+- **Database**: SQLite with rusqlite
 - **Authentication**: JWT + bcrypt
 - **Serialization**: serde
 - **Testing**: cargo test + proptest
-- **Future**: WASM, wasmer/wasmtime (plugins)
+- **Build Tool**: Trunk
+- **Future**: wasmer/wasmtime (plugins)
 
 ## License
 

@@ -47,11 +47,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-target-
 
-      - name: Run tests
-        run: cargo test --workspace --verbose
+      - name: Run tests (backend crates)
+        run: cargo test --workspace --exclude worknest-gui --verbose
 
-      - name: Run doctests
-        run: cargo test --doc --workspace --verbose
+      - name: Run doctests (backend crates)
+        run: cargo test --doc --workspace --exclude worknest-gui --verbose
 
   fmt:
     name: Formatting
@@ -81,6 +81,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -106,8 +107,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-clippy-target-
 
-      - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Run clippy on backend crates
+        run: cargo clippy --workspace --exclude worknest-gui --all-targets -- -D warnings
+
+      - name: Run clippy on web app
+        run: cargo clippy -p worknest-gui --target wasm32-unknown-unknown -- -D warnings
 
   build:
     name: Build
@@ -120,6 +124,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -145,11 +150,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-release-
 
-      - name: Build workspace
-        run: cargo build --workspace --verbose
+      - name: Install Trunk
+        run: cargo install trunk
 
-      - name: Build release
-        run: cargo build --workspace --release --verbose
+      - name: Build workspace (backend crates)
+        run: cargo build --workspace --exclude worknest-gui --verbose
+
+      - name: Build web application
+        run: trunk build --release
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-app
+          path: dist/
 
   coverage:
     name: Code Coverage
