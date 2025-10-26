@@ -27,7 +27,7 @@ impl ApiClient {
     pub async fn register(&self, request: RegisterRequest) -> Result<AuthResponse> {
         let response = self
             .client
-            .post(&self.api_url("/auth/register"))
+            .post(self.api_url("/auth/register"))
             .json(&request)
             .send()
             .await?;
@@ -42,7 +42,7 @@ impl ApiClient {
     pub async fn login(&self, request: LoginRequest) -> Result<AuthResponse> {
         let response = self
             .client
-            .post(&self.api_url("/auth/login"))
+            .post(self.api_url("/auth/login"))
             .json(&request)
             .send()
             .await?;
@@ -58,7 +58,7 @@ impl ApiClient {
     pub async fn get_current_user(&self, token: &str) -> Result<User> {
         let response = self
             .client
-            .get(&self.api_url("/users/me"))
+            .get(self.api_url("/users/me"))
             .bearer_auth(token)
             .send()
             .await?;
@@ -73,7 +73,7 @@ impl ApiClient {
     pub async fn get_users(&self, token: &str) -> Result<Vec<User>> {
         let response = self
             .client
-            .get(&self.api_url("/users"))
+            .get(self.api_url("/users"))
             .bearer_auth(token)
             .send()
             .await?;
@@ -89,7 +89,7 @@ impl ApiClient {
     pub async fn get_projects(&self, token: &str) -> Result<Vec<Project>> {
         let response = self
             .client
-            .get(&self.api_url("/projects"))
+            .get(self.api_url("/projects"))
             .bearer_auth(token)
             .send()
             .await?;
@@ -104,7 +104,7 @@ impl ApiClient {
     pub async fn get_project(&self, token: &str, id: Uuid) -> Result<Project> {
         let response = self
             .client
-            .get(&self.api_url(&format!("/projects/{}", id)))
+            .get(self.api_url(&format!("/projects/{}", id)))
             .bearer_auth(token)
             .send()
             .await?;
@@ -123,7 +123,7 @@ impl ApiClient {
     ) -> Result<Project> {
         let response = self
             .client
-            .post(&self.api_url("/projects"))
+            .post(self.api_url("/projects"))
             .bearer_auth(token)
             .json(&request)
             .send()
@@ -144,7 +144,7 @@ impl ApiClient {
     ) -> Result<Project> {
         let response = self
             .client
-            .put(&self.api_url(&format!("/projects/{}", id)))
+            .put(self.api_url(&format!("/projects/{}", id)))
             .bearer_auth(token)
             .json(&request)
             .send()
@@ -160,7 +160,7 @@ impl ApiClient {
     pub async fn delete_project(&self, token: &str, id: Uuid) -> Result<()> {
         let response = self
             .client
-            .delete(&self.api_url(&format!("/projects/{}", id)))
+            .delete(self.api_url(&format!("/projects/{}", id)))
             .bearer_auth(token)
             .send()
             .await?;
@@ -169,6 +169,49 @@ impl ApiClient {
             Ok(())
         } else {
             Err(anyhow!("Failed to delete project: {}", response.status()))
+        }
+    }
+
+    pub async fn archive_project(&self, token: &str, id: Uuid) -> Result<Project> {
+        let response = self
+            .client
+            .put(self.api_url(&format!("/projects/{}", id)))
+            .bearer_auth(token)
+            .json(&UpdateProjectRequest {
+                name: None,
+                description: None,
+                is_archived: Some(true),
+            })
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to archive project: {}", response.status()))
+        }
+    }
+
+    pub async fn unarchive_project(&self, token: &str, id: Uuid) -> Result<Project> {
+        let response = self
+            .client
+            .put(self.api_url(&format!("/projects/{}", id)))
+            .bearer_auth(token)
+            .json(&UpdateProjectRequest {
+                name: None,
+                description: None,
+                is_archived: Some(false),
+            })
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!(
+                "Failed to unarchive project: {}",
+                response.status()
+            ))
         }
     }
 
@@ -192,7 +235,7 @@ impl ApiClient {
     pub async fn get_ticket(&self, token: &str, id: Uuid) -> Result<Ticket> {
         let response = self
             .client
-            .get(&self.api_url(&format!("/tickets/{}", id)))
+            .get(self.api_url(&format!("/tickets/{}", id)))
             .bearer_auth(token)
             .send()
             .await?;
@@ -207,7 +250,7 @@ impl ApiClient {
     pub async fn create_ticket(&self, token: &str, request: CreateTicketRequest) -> Result<Ticket> {
         let response = self
             .client
-            .post(&self.api_url("/tickets"))
+            .post(self.api_url("/tickets"))
             .bearer_auth(token)
             .json(&request)
             .send()
@@ -228,7 +271,7 @@ impl ApiClient {
     ) -> Result<Ticket> {
         let response = self
             .client
-            .put(&self.api_url(&format!("/tickets/{}", id)))
+            .put(self.api_url(&format!("/tickets/{}", id)))
             .bearer_auth(token)
             .json(&request)
             .send()
@@ -244,7 +287,7 @@ impl ApiClient {
     pub async fn delete_ticket(&self, token: &str, id: Uuid) -> Result<()> {
         let response = self
             .client
-            .delete(&self.api_url(&format!("/tickets/{}", id)))
+            .delete(self.api_url(&format!("/tickets/{}", id)))
             .bearer_auth(token)
             .send()
             .await?;

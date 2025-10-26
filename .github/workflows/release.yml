@@ -27,7 +27,7 @@ jobs:
           prerelease: false
 
   build-release:
-    name: Build Release Binary
+    name: Build Release Web App
     needs: create-release
     runs-on: ubuntu-latest
     steps:
@@ -38,23 +38,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
+      - name: Install Trunk
+        run: cargo install trunk
 
-      - name: Build release binary
-        run: cargo build --release --package worknest-gui
-
-      - name: Strip binary
-        run: strip target/release/worknest
+      - name: Build web application
+        run: trunk build --release
 
       - name: Create archive
         run: |
-          cd target/release
-          tar czf worknest-linux-x86_64.tar.gz worknest
-          cd ../..
+          cd dist
+          tar czf worknest-web.tar.gz *
+          cd ..
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -62,15 +58,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/release/worknest-linux-x86_64.tar.gz
-          asset_name: worknest-linux-x86_64.tar.gz
+          asset_path: ./dist/worknest-web.tar.gz
+          asset_name: worknest-web.tar.gz
           asset_content_type: application/gzip
 
       - name: Generate checksums
         run: |
-          cd target/release
-          sha256sum worknest-linux-x86_64.tar.gz > worknest-linux-x86_64.tar.gz.sha256
-          cd ../..
+          cd dist
+          sha256sum worknest-web.tar.gz > worknest-web.tar.gz.sha256
+          cd ..
 
       - name: Upload checksum
         uses: actions/upload-release-asset@v1
@@ -78,6 +74,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/release/worknest-linux-x86_64.tar.gz.sha256
-          asset_name: worknest-linux-x86_64.tar.gz.sha256
+          asset_path: ./dist/worknest-web.tar.gz.sha256
+          asset_name: worknest-web.tar.gz.sha256
           asset_content_type: text/plain

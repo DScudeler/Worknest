@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::{Priority, ProjectId, Ticket, TicketStatus, TicketType};
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -95,7 +94,7 @@ impl TicketListScreen {
                 ui.add_space(Spacing::MEDIUM);
 
                 ui.label("Status:");
-                egui::ComboBox::from_id_source("status_filter")
+                egui::ComboBox::from_id_salt("status_filter")
                     .selected_text(match self.filter_status {
                         Some(s) => format!("{:?}", s),
                         None => "All".to_string(),
@@ -325,17 +324,12 @@ impl TicketListScreen {
 
             ticket.priority = self.new_ticket_priority;
 
-            match state.ticket_repo.create(&ticket) {
-                Ok(_) => {
-                    state.notify_success("Ticket created successfully".to_string());
-                    self.show_create_dialog = false;
-                    self.clear_create_form();
-                    self.load_tickets(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to create ticket: {:?}", e));
-                },
-            }
+            // Demo mode: Add to in-memory state
+            state.demo_tickets.push(ticket);
+            state.notify_success("Ticket created successfully (Demo Mode)".to_string());
+            self.show_create_dialog = false;
+            self.clear_create_form();
+            self.load_tickets(state);
         }
     }
 
@@ -347,13 +341,16 @@ impl TicketListScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
+        // Demo mode: Load from in-memory state
         self.tickets = if let Some(project_id) = self.project_id {
             state
-                .ticket_repo
-                .find_by_project(project_id)
-                .unwrap_or_default()
+                .demo_tickets
+                .iter()
+                .filter(|t| t.project_id == project_id)
+                .cloned()
+                .collect()
         } else {
-            state.ticket_repo.find_all().unwrap_or_default()
+            state.demo_tickets.clone()
         };
     }
 }

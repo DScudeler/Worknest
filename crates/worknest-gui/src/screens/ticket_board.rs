@@ -159,8 +159,12 @@ impl TicketBoardScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
-        if let Ok(tickets) = state.ticket_repo.find_by_project(self.project_id) {
-            self.tickets = tickets;
-        }
+        // Demo mode: Load from in-memory state
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
     }
 }

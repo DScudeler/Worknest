@@ -1,6 +1,6 @@
 //! Theme and styling for the application
 
-use egui::{Color32, Rounding, Stroke, Visuals};
+use egui::{Color32, CornerRadius, Stroke, Visuals};
 
 /// Application theme
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +88,7 @@ impl Styles {
         egui::Frame::default()
             .inner_margin(Spacing::LARGE)
             .outer_margin(Spacing::MEDIUM)
-            .rounding(Rounding::same(8.0))
+            .corner_radius(CornerRadius::same(8))
             .stroke(Stroke::new(1.0, Color32::from_gray(200)))
             .fill(Color32::from_gray(250))
     }

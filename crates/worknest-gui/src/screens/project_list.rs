@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::Project;
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -178,17 +177,24 @@ impl ProjectListScreen {
                     }
 
                     if project.archived {
-                        if ui.button("Unarchive").clicked()
-                            && state.project_repo.unarchive(project.id).is_ok()
+                        if ui.button("Unarchive").clicked() {
+                            // Demo mode: Update in-memory state
+                            if let Some(p) =
+                                state.demo_projects.iter_mut().find(|p| p.id == project.id)
+                            {
+                                p.archived = false;
+                                state.notify_success("Project unarchived".to_string());
+                                self.load_projects(state);
+                            }
+                        }
+                    } else if ui.button("Archive").clicked() {
+                        // Demo mode: Update in-memory state
+                        if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id)
                         {
-                            state.notify_success("Project unarchived".to_string());
+                            p.archived = true;
+                            state.notify_success("Project archived".to_string());
                             self.load_projects(state);
                         }
-                    } else if ui.button("Archive").clicked()
-                        && state.project_repo.archive(project.id).is_ok()
-                    {
-                        state.notify_success("Project archived".to_string());
-                        self.load_projects(state);
                     }
                 });
             });
@@ -269,17 +275,12 @@ impl ProjectListScreen {
                 project.color = Some(self.new_project_color.clone());
             }
 
-            match state.project_repo.create(&project) {
-                Ok(_) => {
-                    state.notify_success("Project created successfully".to_string());
-                    self.show_create_dialog = false;
-                    self.clear_create_form();
-                    self.load_projects(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to create project: {:?}", e));
-                },
-            }
+            // Demo mode: Add to in-memory state
+            state.demo_projects.push(project);
+            state.notify_success("Project created successfully (Demo Mode)".to_string());
+            self.show_create_dialog = false;
+            self.clear_create_form();
+            self.load_projects(state);
         }
     }
 
@@ -290,9 +291,9 @@ impl ProjectListScreen {
     }
 
     fn load_projects(&mut self, state: &AppState) {
-        if let Ok(projects) = state.project_repo.find_all() {
-            self.projects = projects;
-        }
+        // Demo mode: Load from in-memory state
+        // TODO: Replace with API call when backend is available
+        self.projects = state.demo_projects.clone();
     }
 }
 

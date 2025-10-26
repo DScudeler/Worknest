@@ -25,7 +25,7 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Identifiers
-uuid = { version = "1.6", features = ["v4", "serde"] }
+uuid = { version = "1.6", features = ["v4", "serde", "js"] }
 
 # Error handling
 thiserror = "2.0"
@@ -42,24 +42,17 @@ refinery = { version = "0.9", features = ["rusqlite"] }
 
 # Authentication
 bcrypt = "0.17"
-jsonwebtoken = "10.1"
+jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
 rand = "0.8"
 
-# GUI
-eframe = { version = "0.33", default-features = false, features = [
-    "default_fonts",
-    "glow",
-] }
+# GUI (web-only)
+eframe = { version = "0.33", default-features = false, features = ["glow"] }
 egui = "0.33"
 egui_extras = "0.33"
-# rfd = "0.12"  # Optional: will enable when needed (requires system deps)
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Utilities
-dirs = "5.0"
 
 # Async
 tokio = { version = "1.48", features = ["full"] }

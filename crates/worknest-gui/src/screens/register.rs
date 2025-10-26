@@ -122,6 +122,7 @@ impl RegisterScreen {
         });
     }
 
+    #[allow(clippy::let_unit_value)]
     fn attempt_register(&mut self, state: &mut AppState) {
         self.error_message = None;
 
@@ -161,45 +162,45 @@ impl RegisterScreen {
             return;
         }
 
-        state.is_loading = true;
+        // Demo mode: Create a demo user and auto-login
+        // TODO: Replace with real API call when backend is available
+        // let api_client = state.api_client.clone();
+        // let request = RegisterRequest {
+        //     username: self.username.clone(),
+        //     email: self.email.clone(),
+        //     password: self.password.clone(),
+        //     full_name: None,
+        // };
+        // wasm_bindgen_futures::spawn_local(async move {
+        //     match api_client.register(request).await {
+        //         Ok(response) => { /* handle success */ },
+        //         Err(e) => { /* handle error */ },
+        //     }
+        // });
 
-        // Attempt registration
-        match state
-            .auth_service
-            .register(&self.username, &self.email, &self.password)
-        {
-            Ok(user) => {
-                // Auto-login after registration
-                match state.auth_service.login(&self.username, &self.password) {
-                    Ok(token) => {
-                        state.login(user, token);
-                        state.notify_success("Account created successfully!".to_string());
+        use worknest_core::models::User;
+        use worknest_core::models::UserId;
 
-                        // Clear form
-                        self.username.clear();
-                        self.email.clear();
-                        self.password.clear();
-                        self.confirm_password.clear();
-                        self.error_message = None;
-                    },
-                    Err(_) => {
-                        // Registration succeeded but login failed, navigate to login
-                        state.notify_success("Account created! Please login.".to_string());
-                        state.navigate_to(Screen::Login);
-                    },
-                }
-            },
-            Err(e) => {
-                self.error_message = Some(match e {
-                    worknest_auth::AuthError::UserExists => {
-                        "Username or email already exists".to_string()
-                    },
-                    worknest_auth::AuthError::PasswordValidation(msg) => msg,
-                    _ => "Registration failed. Please try again.".to_string(),
-                });
-            },
-        }
+        let demo_user = User {
+            id: UserId::new(),
+            username: self.username.clone(),
+            email: self.email.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
 
-        state.is_loading = false;
+        // Store in browser storage
+        use gloo_storage::{LocalStorage, Storage};
+        let _ = LocalStorage::set("auth_token", "demo_token");
+        let _ = LocalStorage::set("current_user", &demo_user);
+
+        state.login(demo_user, "demo_token".to_string());
+        state.notify_success("Account created successfully! (Demo Mode)".to_string());
+
+        // Clear form
+        self.username.clear();
+        self.email.clear();
+        self.password.clear();
+        self.confirm_password.clear();
     }
 }

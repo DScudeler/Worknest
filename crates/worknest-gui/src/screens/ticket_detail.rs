@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::{Priority, Ticket, TicketId, TicketStatus, TicketType};
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -73,12 +72,10 @@ impl TicketDetailScreen {
                                     if ui
                                         .add(egui::Button::new("Delete").fill(Colors::ERROR))
                                         .clicked()
-                                        && state.ticket_repo.delete(ticket.id).is_ok()
                                     {
-                                        state.notify_success("Ticket deleted".to_string());
-                                        state.navigate_to(Screen::TicketList {
-                                            project_id: Some(ticket.project_id),
-                                        });
+                                        // TODO: API delete ticket
+                                        state
+                                            .notify_info("API integration in progress".to_string());
                                     }
                                 },
                             );
@@ -312,33 +309,33 @@ impl TicketDetailScreen {
             ticket.status = self.edit_status;
             ticket.priority = self.edit_priority;
 
-            match state.ticket_repo.update(&ticket) {
-                Ok(_) => {
-                    state.notify_success("Ticket updated".to_string());
-                    self.is_editing = false;
-                    self.load_data(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to update ticket: {:?}", e));
-                },
-            }
+            // TODO: API update ticket
+            // match state.api_client.update_ticket(&ticket).await {
+            //     Ok(_) => {
+            //         state.notify_success("Ticket updated".to_string());
+            //         self.is_editing = false;
+            //         self.load_data(state);
+            //     },
+            //     Err(e) => {
+            //         state.notify_error(format!("Failed to update ticket: {:?}", e));
+            //     },
+            // }
+            state.notify_info("API integration in progress".to_string());
         }
     }
 
-    fn update_status(&mut self, state: &mut AppState, new_status: TicketStatus) {
-        if state
-            .ticket_repo
-            .update_status(self.ticket_id, new_status)
-            .is_ok()
-        {
-            state.notify_success(format!("Ticket status updated to {:?}", new_status));
-            self.load_data(state);
-        }
+    fn update_status(&mut self, state: &mut AppState, _new_status: TicketStatus) {
+        // TODO: API update status
+        // state.api_client.update_ticket_status(self.ticket_id, new_status)
+        state.notify_info("API integration in progress".to_string());
     }
 
     fn load_data(&mut self, state: &AppState) {
-        if let Ok(Some(ticket)) = state.ticket_repo.find_by_id(self.ticket_id) {
-            self.ticket = Some(ticket);
-        }
+        // Demo mode: Load from in-memory state
+        self.ticket = state
+            .demo_tickets
+            .iter()
+            .find(|t| t.id == self.ticket_id)
+            .cloned();
     }
 }

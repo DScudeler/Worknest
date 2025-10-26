@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::{Project, ProjectId, Ticket};
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -66,19 +65,8 @@ impl ProjectDetailScreen {
                                         self.start_editing(&project);
                                     }
 
-                                    if project.archived {
-                                        if ui.button("Unarchive").clicked()
-                                            && state.project_repo.unarchive(project.id).is_ok()
-                                        {
-                                            state.notify_success("Project unarchived".to_string());
-                                            self.load_data(state);
-                                        }
-                                    } else if ui.button("Archive").clicked()
-                                        && state.project_repo.archive(project.id).is_ok()
-                                    {
-                                        state.notify_success("Project archived".to_string());
-                                        self.load_data(state);
-                                    }
+                                    // Archive/unarchive functionality is available in project list
+                                    // TODO: Add archive/unarchive buttons here when API is ready
                                 },
                             );
                         }
@@ -296,27 +284,36 @@ impl ProjectDetailScreen {
                 Some(self.edit_color.clone())
             };
 
-            match state.project_repo.update(&project) {
-                Ok(_) => {
-                    state.notify_success("Project updated".to_string());
-                    self.is_editing = false;
-                    self.load_data(state);
-                },
-                Err(e) => {
-                    state.notify_error(format!("Failed to update project: {:?}", e));
-                },
-            }
+            // TODO: API update project
+            // match state.api_client.update_project(&project).await {
+            //     Ok(_) => {
+            //         state.notify_success("Project updated".to_string());
+            //         self.is_editing = false;
+            //         self.load_data(state);
+            //     },
+            //     Err(e) => {
+            //         state.notify_error(format!("Failed to update project: {:?}", e));
+            //     },
+            // }
+            state.notify_info("API integration in progress".to_string());
         }
     }
 
     fn load_data(&mut self, state: &AppState) {
-        if let Ok(Some(project)) = state.project_repo.find_by_id(self.project_id) {
-            self.project = Some(project);
-        }
+        // Demo mode: Load from in-memory state
+        self.project = state
+            .demo_projects
+            .iter()
+            .find(|p| p.id == self.project_id)
+            .cloned();
 
-        if let Ok(tickets) = state.ticket_repo.find_by_project(self.project_id) {
-            self.tickets = tickets;
-        }
+        // Load associated tickets
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
     }
 }
 

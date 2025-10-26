@@ -3,7 +3,6 @@
 use egui::{RichText, ScrollArea};
 
 use worknest_core::models::Project;
-use worknest_db::Repository;
 
 use crate::{
     screens::Screen,
@@ -186,10 +185,18 @@ impl DashboardScreen {
     }
 
     fn load_data(&mut self, state: &AppState) {
-        // Load recent projects
-        if let Ok(projects) = state.project_repo.find_all() {
-            self.recent_projects = projects;
-        }
+        // Demo mode: Load from in-memory state
+        // TODO: Replace with API call when backend is available
+        // wasm_bindgen_futures::spawn_local(async move {
+        //     if let Some(token) = &state.auth_token {
+        //         match state.api_client.get_projects(token).await {
+        //             Ok(projects) => { /* update state */ },
+        //             Err(e) => { /* handle error */ },
+        //         }
+        //     }
+        // });
+
+        self.recent_projects = state.demo_projects.clone();
     }
 }
 
