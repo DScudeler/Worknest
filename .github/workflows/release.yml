@@ -40,22 +40,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-git-
 
-      - name: Cache Trunk
+      - name: Cache wasm-pack
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/trunk
-          key: ${{ runner.os }}-trunk-${{ hashFiles('~/.cargo/bin/trunk') }}
+          path: ~/.cargo/bin/wasm-pack
+          key: ${{ runner.os }}-wasm-pack-${{ hashFiles('~/.cargo/bin/wasm-pack') }}
           restore-keys: |
-            ${{ runner.os }}-trunk-
+            ${{ runner.os }}-wasm-pack-
 
-      - name: Install Trunk
+      - name: Install wasm-pack
         run: |
-          if ! command -v trunk &> /dev/null; then
-            cargo install trunk --locked
+          if ! command -v wasm-pack &> /dev/null; then
+            cargo install wasm-pack
           fi
 
       - name: Build web application
-        run: trunk build --release
+        run: ./build-webapp.sh release
 
       - name: Display build size
         run: |
