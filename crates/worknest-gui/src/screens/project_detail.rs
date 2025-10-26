@@ -65,19 +65,8 @@ impl ProjectDetailScreen {
                                         self.start_editing(&project);
                                     }
 
-                                    if project.archived {
-                                        if ui.button("Unarchive").clicked()
-                                            && false // TODO: API unarchive
-                                        {
-                                            state.notify_success("Project unarchived".to_string());
-                                            self.load_data(state);
-                                        }
-                                    } else if ui.button("Archive").clicked()
-                                        && false // TODO: API archive
-                                    {
-                                        state.notify_success("Project archived".to_string());
-                                        self.load_data(state);
-                                    }
+                                    // Archive/unarchive functionality is available in project list
+                                    // TODO: Add archive/unarchive buttons here when API is ready
                                 },
                             );
                         }
@@ -312,10 +301,19 @@ impl ProjectDetailScreen {
 
     fn load_data(&mut self, state: &AppState) {
         // Demo mode: Load from in-memory state
-        self.project = state.demo_projects.iter().find(|p| p.id == self.project_id).cloned();
+        self.project = state
+            .demo_projects
+            .iter()
+            .find(|p| p.id == self.project_id)
+            .cloned();
 
         // Load associated tickets
-        self.tickets = state.demo_tickets.iter().filter(|t| t.project_id == self.project_id).cloned().collect();
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
     }
 }
 

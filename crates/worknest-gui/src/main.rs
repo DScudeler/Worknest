@@ -3,8 +3,8 @@
 //! Web application for Worknest built with egui.
 //! Runs in the browser with responsive UI for desktop and mobile.
 
-use wasm_bindgen::JsCast;
 use eframe::egui;
+use wasm_bindgen::JsCast;
 use worknest_gui::{
     api_client::ApiClient,
     screens::{
@@ -29,7 +29,7 @@ fn main() {
         .expect("No window found")
         .document()
         .expect("No document found");
-    
+
     let canvas = document
         .get_element_by_id("worknest_canvas")
         .expect("Failed to find worknest_canvas element")
@@ -273,4 +273,3 @@ impl eframe::App for WorknestApp {
         }
     }
 }
-

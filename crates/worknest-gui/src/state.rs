@@ -58,6 +58,7 @@ impl AppState {
     }
 
     /// Logout user
+    #[allow(clippy::let_unit_value)]
     pub fn logout(&mut self) {
         self.current_user = None;
         self.auth_token = None;

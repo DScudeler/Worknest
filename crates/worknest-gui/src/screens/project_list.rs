@@ -179,7 +179,9 @@ impl ProjectListScreen {
                     if project.archived {
                         if ui.button("Unarchive").clicked() {
                             // Demo mode: Update in-memory state
-                            if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                            if let Some(p) =
+                                state.demo_projects.iter_mut().find(|p| p.id == project.id)
+                            {
                                 p.archived = false;
                                 state.notify_success("Project unarchived".to_string());
                                 self.load_projects(state);
@@ -187,7 +189,8 @@ impl ProjectListScreen {
                         }
                     } else if ui.button("Archive").clicked() {
                         // Demo mode: Update in-memory state
-                        if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                        if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id)
+                        {
                             p.archived = true;
                             state.notify_success("Project archived".to_string());
                             self.load_projects(state);

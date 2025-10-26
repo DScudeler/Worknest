@@ -94,7 +94,7 @@ impl TicketListScreen {
                 ui.add_space(Spacing::MEDIUM);
 
                 ui.label("Status:");
-                egui::ComboBox::from_id_source("status_filter")
+                egui::ComboBox::from_id_salt("status_filter")
                     .selected_text(match self.filter_status {
                         Some(s) => format!("{:?}", s),
                         None => "All".to_string(),
@@ -343,7 +343,12 @@ impl TicketListScreen {
     fn load_tickets(&mut self, state: &AppState) {
         // Demo mode: Load from in-memory state
         self.tickets = if let Some(project_id) = self.project_id {
-            state.demo_tickets.iter().filter(|t| t.project_id == project_id).cloned().collect()
+            state
+                .demo_tickets
+                .iter()
+                .filter(|t| t.project_id == project_id)
+                .cloned()
+                .collect()
         } else {
             state.demo_tickets.clone()
         };

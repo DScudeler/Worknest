@@ -160,6 +160,11 @@ impl TicketBoardScreen {
 
     fn load_tickets(&mut self, state: &AppState) {
         // Demo mode: Load from in-memory state
-        self.tickets = state.demo_tickets.iter().filter(|t| t.project_id == self.project_id).cloned().collect();
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
     }
 }

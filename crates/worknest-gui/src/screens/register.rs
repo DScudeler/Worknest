@@ -122,6 +122,7 @@ impl RegisterScreen {
         });
     }
 
+    #[allow(clippy::let_unit_value)]
     fn attempt_register(&mut self, state: &mut AppState) {
         self.error_message = None;
 
