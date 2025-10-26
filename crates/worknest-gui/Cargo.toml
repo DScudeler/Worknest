@@ -25,7 +25,7 @@ anyhow.workspace = true
 tracing.workspace = true
 
 # GUI framework (web-only)
-eframe = { workspace = true, default-features = false, features = ["glow"] }
+eframe = { workspace = true, default-features = false, features = ["glow", "web_screen_reader"] }
 egui.workspace = true
 egui_extras.workspace = true
 

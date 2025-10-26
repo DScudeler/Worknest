@@ -9,27 +9,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
   build-release:
-    name: Build Release Web App
-    needs: create-release
+    name: Build and Release Web App
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -40,40 +24,73 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
 
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache Trunk
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/trunk
+          key: ${{ runner.os }}-trunk-${{ hashFiles('~/.cargo/bin/trunk') }}
+          restore-keys: |
+            ${{ runner.os }}-trunk-
+
       - name: Install Trunk
-        run: cargo install trunk
+        run: |
+          if ! command -v trunk &> /dev/null; then
+            cargo install trunk --locked
+          fi
 
       - name: Build web application
         run: trunk build --release
 
+      - name: Display build size
+        run: |
+          echo "Web application build size:"
+          du -sh dist/
+          echo ""
+          echo "WASM file size:"
+          find dist/ -name "*.wasm" -exec ls -lh {} \;
+
       - name: Create archive
         run: |
           cd dist
-          tar czf worknest-web.tar.gz *
+          tar czf ../worknest-web.tar.gz *
           cd ..
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/worknest-web.tar.gz
-          asset_name: worknest-web.tar.gz
-          asset_content_type: application/gzip
 
       - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum worknest-web.tar.gz > worknest-web.tar.gz.sha256
-          cd ..
+        run: sha256sum worknest-web.tar.gz > worknest-web.tar.gz.sha256
 
-      - name: Upload checksum
-        uses: actions/upload-release-asset@v1
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            worknest-web.tar.gz
+            worknest-web.tar.gz.sha256
+          body: |
+            ## Worknest Web Application Release
+
+            This release contains the web application built for WASM.
+
+            ### Installation
+            1. Download `worknest-web.tar.gz`
+            2. Verify with `worknest-web.tar.gz.sha256`
+            3. Extract: `tar xzf worknest-web.tar.gz`
+            4. Serve the files with a web server
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/worknest-web.tar.gz.sha256
-          asset_name: worknest-web.tar.gz.sha256
-          asset_content_type: text/plain

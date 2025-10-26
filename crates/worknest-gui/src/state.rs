@@ -50,7 +50,7 @@ impl AppState {
         self.current_user.is_some() && self.auth_token.is_some()
     }
 
-    /// Login user (with string token for both native and web)
+    /// Login user with authentication token
     pub fn login(&mut self, user: User, token: String) {
         self.current_user = Some(user);
         self.auth_token = Some(token);

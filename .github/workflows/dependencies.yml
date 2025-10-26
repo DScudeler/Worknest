@@ -19,8 +19,16 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Cache cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-tools-outdated
+          restore-keys: |
+            ${{ runner.os }}-cargo-tools-
+
       - name: Install cargo-outdated
-        run: cargo install cargo-outdated
+        run: cargo install cargo-outdated --locked
 
       - name: Check for outdated dependencies
         run: cargo outdated --workspace --root-deps-only
@@ -36,9 +44,21 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-tools-udeps
+          restore-keys: |
+            ${{ runner.os }}-cargo-tools-
 
       - name: Install cargo-udeps
         run: cargo install cargo-udeps --locked
 
-      - name: Check for unused dependencies
-        run: cargo +nightly udeps --workspace
+      - name: Check for unused dependencies (backend crates)
+        run: cargo +nightly udeps --workspace --exclude worknest-gui
+
+      - name: Check for unused dependencies (web app)
+        run: cargo +nightly udeps -p worknest-gui --target wasm32-unknown-unknown
