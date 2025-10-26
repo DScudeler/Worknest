@@ -55,12 +55,18 @@ cat > "$DIST_DIR/index.html" << 'EOF'
         }
 
         #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
             color: #ffffff;
+            z-index: 1000;
+            background-color: #1a1a1a;
         }
 
         .spinner {
@@ -80,16 +86,22 @@ cat > "$DIST_DIR/index.html" << 'EOF'
 
         #error {
             display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             padding: 20px;
-            margin: 20px;
             background-color: #ff4444;
             color: white;
             border-radius: 4px;
             max-width: 600px;
-            margin: 20px auto;
+            z-index: 2000;
         }
 
         #worknest_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
         }
