@@ -120,15 +120,9 @@ impl WorknestApp {
             egui::TopBottomPanel::top("notifications").show(ctx, |ui| {
                 for notification in &self.state.notifications {
                     let color = match notification.level {
-                        crate::state::NotificationLevel::Success => {
-                            crate::theme::Colors::SUCCESS
-                        },
-                        crate::state::NotificationLevel::Error => {
-                            crate::theme::Colors::ERROR
-                        },
-                        crate::state::NotificationLevel::Info => {
-                            crate::theme::Colors::INFO
-                        },
+                        crate::state::NotificationLevel::Success => crate::theme::Colors::SUCCESS,
+                        crate::state::NotificationLevel::Error => crate::theme::Colors::ERROR,
+                        crate::state::NotificationLevel::Info => crate::theme::Colors::INFO,
                     };
 
                     ui.colored_label(color, &notification.message);
