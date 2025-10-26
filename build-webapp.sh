@@ -111,10 +111,9 @@ cat > "$DIST_DIR/index.html" << 'EOF'
             try {
                 // Initialize WASM module
                 // The start() function runs automatically thanks to #[wasm_bindgen(start)]
+                // The Rust code will hide the loading screen once eframe is ready
                 await init();
-
-                // Hide loading indicator
-                document.getElementById('loading').style.display = 'none';
+                console.log('WASM module initialized');
             } catch (error) {
                 console.error('Failed to initialize:', error);
                 document.getElementById('loading').style.display = 'none';
