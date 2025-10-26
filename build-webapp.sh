@@ -44,7 +44,14 @@ cat > "$DIST_DIR/index.html" << 'EOF'
     <meta name="description" content="Worknest - Project and Ticket Management">
     <title>Worknest</title>
     <style>
-        html, body {
+        html {
+            height: 100%;
+        }
+
+        body {
+            position: fixed;
+            top: 0;
+            left: 0;
             margin: 0;
             padding: 0;
             width: 100%;
@@ -104,6 +111,8 @@ cat > "$DIST_DIR/index.html" << 'EOF'
             left: 0;
             width: 100%;
             height: 100%;
+            display: block;
+            outline: none;
         }
     </style>
 </head>
@@ -120,12 +129,39 @@ cat > "$DIST_DIR/index.html" << 'EOF'
         import init from './worknest_gui.js';
 
         async function run() {
+            console.log('Starting Worknest initialization...');
+
             try {
+                // Check canvas exists and set dimensions
+                const canvas = document.getElementById('worknest_canvas');
+                console.log('Canvas element:', canvas);
+
+                // Set canvas internal dimensions to match display size
+                const updateCanvasSize = () => {
+                    const dpr = window.devicePixelRatio || 1;
+                    canvas.width = window.innerWidth * dpr;
+                    canvas.height = window.innerHeight * dpr;
+                    console.log('Canvas dimensions set to:', canvas.width, 'x', canvas.height);
+                };
+
+                updateCanvasSize();
+                window.addEventListener('resize', updateCanvasSize);
+
                 // Initialize WASM module
                 // The start() function runs automatically thanks to #[wasm_bindgen(start)]
                 // The Rust code will hide the loading screen once eframe is ready
+                console.log('Calling init()...');
                 await init();
-                console.log('WASM module initialized');
+                console.log('WASM module initialized successfully');
+
+                // Fallback: hide loading screen after 3 seconds if Rust code doesn't do it
+                setTimeout(() => {
+                    const loading = document.getElementById('loading');
+                    if (loading && loading.style.display !== 'none') {
+                        console.warn('Loading screen still visible after 3s, hiding it now');
+                        loading.style.display = 'none';
+                    }
+                }, 3000);
             } catch (error) {
                 console.error('Failed to initialize:', error);
                 document.getElementById('loading').style.display = 'none';
