@@ -259,10 +259,7 @@ pub fn start() {
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .expect("Failed to cast to canvas");
 
-    let mut web_options = eframe::WebOptions::default();
-    // Configure for full-screen canvas
-    web_options.follow_system_theme = false;
-    web_options.default_theme = eframe::Theme::Dark;
+    let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async move {
         tracing::info!("Creating eframe WebRunner...");
