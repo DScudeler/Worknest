@@ -2,7 +2,15 @@
 
 **An open-source project and task manager built for software development teams**
 
+[![Deploy to GitHub Pages](https://github.com/DScudeler/Worknest/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/DScudeler/Worknest/actions/workflows/deploy-pages.yml)
+
 Worknest is a modern, high-performance project management tool built entirely in Rust. It provides a responsive web application that works seamlessly on both desktop and mobile browsers, giving developers a fast, reliable, and extensible platform for managing projects and tasks.
+
+## 🚀 Try the Demo
+
+**[Launch Worknest Demo](https://dscudeler.github.io/Worknest/)** _(once GitHub Pages is enabled)_
+
+The demo runs entirely in your browser with no backend required! All data is stored locally in your browser's localStorage.
 
 ## Features (Planned)
 
@@ -113,6 +121,26 @@ make fmt               # Format code
 make clippy            # Run linter
 make clean             # Clean build artifacts
 ```
+
+## Deploying to GitHub Pages
+
+To enable the live demo on GitHub Pages:
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository Settings → Pages
+   - Under "Source", select "GitHub Actions"
+   - Save the settings
+
+2. **The workflow will automatically deploy when you push to `main`:**
+   - The `.github/workflows/deploy-pages.yml` workflow builds the webapp
+   - Deploys to GitHub Pages automatically
+   - Your demo will be available at: `https://dscudeler.github.io/Worknest/`
+
+3. **Manual deployment (optional):**
+   - Go to Actions → Deploy to GitHub Pages
+   - Click "Run workflow" → "Run workflow"
+
+**Note:** The first deployment may take a few minutes. Once deployed, your demo mode will be accessible to anyone with the URL!
 
 ## Project Status
 
