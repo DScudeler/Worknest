@@ -103,18 +103,16 @@ cat > "$DIST_DIR/index.html" << 'EOF'
     <div id="error"></div>
 
     <script type="module">
-        import init, { run_app } from './worknest_gui.js';
+        import init from './worknest_gui.js';
 
         async function run() {
             try {
                 // Initialize WASM module
+                // The start() function runs automatically thanks to #[wasm_bindgen(start)]
                 await init();
 
                 // Hide loading indicator
                 document.getElementById('loading').style.display = 'none';
-
-                // Start the application
-                await run_app();
             } catch (error) {
                 console.error('Failed to initialize:', error);
                 document.getElementById('loading').style.display = 'none';
