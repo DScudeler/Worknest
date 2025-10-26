@@ -278,14 +278,26 @@ pub fn start() {
         match result {
             Ok(_) => {
                 tracing::info!("eframe started successfully!");
-                // Hide loading screen now that eframe is ready
+
+                // Use setTimeout to hide loading screen after a short delay
+                // This ensures eframe has time to render at least one frame
                 if let Some(window) = web_sys::window() {
-                    if let Some(document) = window.document() {
-                        if let Some(loading) = document.get_element_by_id("loading") {
-                            let _ = loading.set_attribute("style", "display: none;");
-                            tracing::info!("Loading screen hidden");
+                    let closure = wasm_bindgen::closure::Closure::once(move || {
+                        if let Some(window_inner) = web_sys::window() {
+                            if let Some(document) = window_inner.document() {
+                                if let Some(loading) = document.get_element_by_id("loading") {
+                                    let _ = loading.set_attribute("style", "display: none;");
+                                    tracing::info!("Loading screen hidden");
+                                }
+                            }
                         }
-                    }
+                    });
+
+                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                        closure.as_ref().unchecked_ref(),
+                        200, // Wait 200ms for first frame
+                    );
+                    closure.forget();
                 }
             },
             Err(e) => {
@@ -305,7 +317,7 @@ pub fn start() {
                         }
                     }
                 }
-            }
+            },
         }
     });
 }
