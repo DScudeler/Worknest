@@ -26,59 +26,91 @@ Worknest now supports two deployment modes:
    rustup target add wasm32-unknown-unknown
    ```
 
-2. **Trunk** (WASM web application bundler)
+2. **wasm-pack** (WASM build tool)
    ```bash
-   cargo install trunk
+   cargo install wasm-pack
    ```
 
-3. **wasm-bindgen-cli** (optional, for manual builds)
-   ```bash
-   cargo install wasm-bindgen-cli
-   ```
+3. **Python 3** (for local development server)
+   - Usually pre-installed on macOS and Linux
+   - Windows: Download from [python.org](https://www.python.org/)
 
 ## Building for Web
+
+### Quick Start
+
+```bash
+# Build and serve the webapp (one command!)
+make serve-webapp
+
+# Or build only
+make build-webapp
+```
 
 ### Development Build
 
 ```bash
-# Build and serve locally with hot reload
-trunk serve
+# Build in debug mode (faster builds)
+./build-webapp.sh debug
 
-# Or specify a custom port
-trunk serve --port 8080
+# Serve locally
+cd dist && python3 serve.py
 ```
 
 This will:
-- Build the WASM application
-- Start a development server at `http://127.0.0.1:8080`
-- Watch for changes and auto-rebuild
+- Build the WASM application using wasm-pack
+- Generate optimized JavaScript glue code
+- Create a complete `dist/` directory ready to serve
+- Start a development server at `http://localhost:8080`
 
 ### Production Build
 
 ```bash
 # Build optimized WASM bundle
-trunk build --release
+./build-webapp.sh release
+
+# Or use make
+make build-webapp
 ```
 
 The output will be in the `dist/` directory:
-- `index.html` - Main HTML file
-- `worknest-*.js` - JavaScript glue code
-- `worknest-*.wasm` - Compiled WebAssembly binary
-- Static assets
+- `index.html` - Main HTML file with loading UI
+- `worknest_gui.js` - JavaScript module
+- `worknest_gui_bg.wasm` - Compiled WebAssembly binary
+- `serve.py` - Local development server
 
 ### Build Options
 
 ```bash
-# Build with custom public URL (for subdirectory deployment)
-trunk build --release --public-url /worknest/
+# Debug build (faster, larger file size)
+./build-webapp.sh debug
+
+# Release build (slower, optimized and smaller)
+./build-webapp.sh release
 
 # Clean build artifacts
-trunk clean
+make clean
+# Or manually:
+rm -rf dist pkg target
 ```
 
-## Running the Backend API Server
+## Demo Mode vs Backend API
 
-The web application requires the backend API server to be running:
+### Demo Mode (Default)
+
+**The webapp runs in full demo mode by default** - no backend required!
+
+- All data stored in-memory and browser localStorage
+- Full CRUD operations on projects and tickets
+- Perfect for testing, development, and demonstrations
+- Data persists across page reloads (via localStorage)
+- Notifications indicate "Demo Mode" operations
+
+Simply build and serve the webapp - it works standalone!
+
+### Backend API (Optional)
+
+For production use with persistent database storage:
 
 ```bash
 # Start the API server
@@ -91,8 +123,9 @@ By default, the API server runs on `http://localhost:3000`.
 
 The web app automatically detects the API URL from `window.location.origin`. For development with a different API server:
 
-1. Update the API URL in `crates/worknest-gui/src/main.rs` (web mode initialization)
+1. Update the API URL in `crates/worknest-gui/src/api_client.rs`
 2. Or use a reverse proxy to serve both the WASM app and API from the same origin
+3. Uncomment API calls in screen files (currently marked with TODO comments)
 
 ## Deployment
 
@@ -159,12 +192,11 @@ export WORKNEST_PORT="3000"
 
 ### Frontend (Build Time)
 
-Set via `Trunk.toml` or environment:
+Currently uses demo mode by default. For production API integration:
 
-```bash
-# API base URL for production
-export PUBLIC_API_URL="https://api.worknest.example.com"
-```
+1. Update `crates/worknest-gui/src/api_client.rs` to set the API URL
+2. Uncomment API calls in screen files (replace demo operations)
+3. Configure CORS on your backend server
 
 ## Features
 
@@ -244,19 +276,27 @@ Requirements:
 
 1. **Enable release mode**
    ```bash
-   trunk build --release
+   ./build-webapp.sh release
+   # or
+   make build-webapp
    ```
 
-2. **Use wasm-opt** (part of binaryen)
+2. **Use wasm-opt** (part of binaryen) for further optimization
    ```bash
+   # Install binaryen
+   cargo install wasm-opt
+
+   # Optimize WASM file
    wasm-opt dist/*.wasm -O3 -o dist/optimized.wasm
    ```
 
-3. **Enable LTO** in `Cargo.toml`:
+3. **LTO is already enabled** in `Cargo.toml`:
    ```toml
    [profile.release]
    lto = true
-   opt-level = "z"  # Optimize for size
+   opt-level = 3
+   codegen-units = 1
+   strip = true
    ```
 
 ## Troubleshooting
@@ -284,9 +324,13 @@ The `worknest-api` server has CORS enabled by default in development mode.
 
 ```bash
 # Clean and rebuild
-trunk clean
+make clean
+./build-webapp.sh release
+
+# Or manually:
+rm -rf dist pkg target
 cargo clean
-trunk build
+./build-webapp.sh release
 ```
 
 ## Next Steps
@@ -299,7 +343,8 @@ trunk build
 
 ## Resources
 
-- [Trunk Documentation](https://trunkrs.dev/)
+- [wasm-pack Documentation](https://rustwasm.github.io/wasm-pack/)
 - [wasm-bindgen Guide](https://rustwasm.github.io/wasm-bindgen/)
 - [egui Web Demo](https://www.egui.rs/#demo)
 - [Rust WASM Book](https://rustwasm.github.io/docs/book/)
+- [WebAssembly MDN Guide](https://developer.mozilla.org/en-US/docs/WebAssembly)

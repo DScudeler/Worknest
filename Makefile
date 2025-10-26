@@ -1,24 +1,30 @@
 # Worknest Makefile
 # Convenient commands for local development
 
-.PHONY: help build test check fmt clippy clean run dev install audit coverage
+.PHONY: help build test check fmt clippy clean run dev install audit coverage build-webapp serve-webapp
 
 # Default target
 help:
 	@echo "Worknest Development Commands"
 	@echo "=============================="
-	@echo "  make build       - Build all crates in release mode"
-	@echo "  make test        - Run all tests"
-	@echo "  make check       - Run all checks (fmt, clippy, test)"
-	@echo "  make fmt         - Format code"
-	@echo "  make clippy      - Run clippy linter"
-	@echo "  make clean       - Clean build artifacts"
-	@echo "  make run         - Run the GUI application"
-	@echo "  make dev         - Run the GUI application in dev mode"
-	@echo "  make install     - Install the binary locally"
-	@echo "  make audit       - Run security audit"
-	@echo "  make coverage    - Generate code coverage report"
-	@echo "  make pre-commit  - Run all pre-commit checks"
+	@echo ""
+	@echo "Web Application:"
+	@echo "  make build-webapp      - Build webapp (no trunk required)"
+	@echo "  make serve-webapp      - Build and serve webapp locally"
+	@echo ""
+	@echo "Backend Development:"
+	@echo "  make build             - Build all crates in release mode"
+	@echo "  make test              - Run all tests"
+	@echo "  make check             - Run all checks (fmt, clippy, test)"
+	@echo "  make fmt               - Format code"
+	@echo "  make clippy            - Run clippy linter"
+	@echo "  make clean             - Clean build artifacts"
+	@echo "  make run               - Run the GUI application"
+	@echo "  make dev               - Run the GUI application in dev mode"
+	@echo "  make install           - Install the binary locally"
+	@echo "  make audit             - Run security audit"
+	@echo "  make coverage          - Generate code coverage report"
+	@echo "  make pre-commit        - Run all pre-commit checks"
 
 # Build release
 build:
@@ -49,6 +55,7 @@ clippy:
 clean:
 	@echo "Cleaning build artifacts..."
 	@cargo clean
+	@rm -rf dist pkg
 
 # Run GUI application in release mode
 run:
@@ -112,3 +119,18 @@ outdated:
 bench:
 	@echo "Running benchmarks..."
 	@cargo bench --workspace
+
+# Build webapp (no trunk required)
+build-webapp:
+	@echo "Building webapp with wasm-pack..."
+	@./build-webapp.sh release
+
+# Build webapp in debug mode
+build-webapp-dev:
+	@echo "Building webapp in debug mode..."
+	@./build-webapp.sh debug
+
+# Serve webapp locally
+serve-webapp: build-webapp
+	@echo "Serving webapp at http://localhost:8080"
+	@cd dist && python3 serve.py

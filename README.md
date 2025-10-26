@@ -53,8 +53,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 ### Prerequisites
 
 - Rust 1.70+ (install from [rustup.rs](https://rustup.rs))
-- [Trunk](https://trunkrs.dev/) for building the web application (`cargo install trunk`)
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/) for building the web application (`cargo install wasm-pack`)
 - wasm32 target (`rustup target add wasm32-unknown-unknown`)
+- Python 3 (for local development server)
 
 ### Building from Source
 
@@ -63,28 +64,54 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
 git clone https://github.com/DScudeler/Worknest.git
 cd Worknest
 
-# Build the web application
-trunk build --release
+# Build the web application (simple one-command build)
+make build-webapp
+
+# Or use the build script directly
+./build-webapp.sh release
 
 # The built files will be in the dist/ directory
 ```
 
 ### Development
 
+**Demo Mode**: The webapp runs in full demo mode with in-memory data - no backend required! Perfect for trying out features and UI development.
+
 ```bash
-# Run the web application in development mode with hot reload
-trunk serve
+# Build and serve the web application locally
+make serve-webapp
 
-# The application will be available at http://127.0.0.1:8080
+# Or manually:
+./build-webapp.sh release
+cd dist && python3 serve.py
 
-# Run tests
-cargo test --workspace
+# The application will be available at http://localhost:8080
+
+# Run tests (backend only)
+make test
+
+# Or:
+cargo test --workspace --exclude worknest-gui
 
 # Check code formatting
-cargo fmt --check
+make fmt
 
 # Run linter
-cargo clippy --workspace --all-targets -- -D warnings
+make clippy
+
+# Quick check (format + lint + test)
+make quick-check
+```
+
+**Available Make Commands:**
+```bash
+make help              # Show all available commands
+make build-webapp      # Build webapp in production mode
+make serve-webapp      # Build and serve webapp locally
+make test              # Run all tests
+make fmt               # Format code
+make clippy            # Run linter
+make clean             # Clean build artifacts
 ```
 
 ## Project Status
@@ -136,7 +163,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) (coming soon) for detailed guidelines.
 - **Authentication**: JWT + bcrypt
 - **Serialization**: serde
 - **Testing**: cargo test + proptest
-- **Build Tool**: Trunk
+- **Build Tool**: wasm-pack
+- **Demo Mode**: Fully functional in-browser demo with localStorage
 - **Future**: wasmer/wasmtime (plugins)
 
 ## License
