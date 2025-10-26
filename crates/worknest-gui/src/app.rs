@@ -262,13 +262,50 @@ pub fn start() {
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async move {
-        eframe::WebRunner::new()
+        tracing::info!("Creating eframe WebRunner...");
+
+        let result = eframe::WebRunner::new()
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(WorknestApp::new(cc)) as Box<dyn eframe::App>)),
+                Box::new(|cc| {
+                    tracing::info!("Creating WorknestApp...");
+                    Ok(Box::new(WorknestApp::new(cc)) as Box<dyn eframe::App>)
+                }),
             )
-            .await
-            .expect("Failed to start eframe");
+            .await;
+
+        match result {
+            Ok(_) => {
+                tracing::info!("eframe started successfully!");
+                // Hide loading screen now that eframe is ready
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        if let Some(loading) = document.get_element_by_id("loading") {
+                            let _ = loading.set_attribute("style", "display: none;");
+                            tracing::info!("Loading screen hidden");
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::error!("Failed to start eframe: {:?}", e);
+                // Show error in the error div
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        if let Some(error_div) = document.get_element_by_id("error") {
+                            let _ = error_div.set_attribute("style", "display: block;");
+                            error_div.set_inner_html(&format!(
+                                "<h2>Failed to load application</h2><p>{:?}</p>",
+                                e
+                            ));
+                        }
+                        if let Some(loading) = document.get_element_by_id("loading") {
+                            let _ = loading.set_attribute("style", "display: none;");
+                        }
+                    }
+                }
+            }
+        }
     });
 }
