@@ -1,19 +1,25 @@
 //! Worknest GUI Application Binary
 //!
-//! This is the binary entry point for Worknest web application.
-//! The actual application logic is in the `app` module.
+//! **NOTE**: This binary is NOT used for the actual application.
+//!
+//! The real WASM entry point is in app.rs:
+//! - Function: `pub fn start()` with `#[wasm_bindgen(start)]` attribute
+//! - This gets called automatically when the WASM module loads in the browser
+//!
+//! This main.rs exists only to satisfy Cargo's requirement for binaries.
 
 fn main() {
-    // For wasm32, the app module handles initialization via #[wasm_bindgen(start)]
-    // This main function won't actually be called in WASM builds
-    #[cfg(target_arch = "wasm32")]
-    {
-        // The wasm_bindgen start function in app.rs will be called automatically
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        eprintln!("This application is designed to run as WebAssembly in a browser.");
-        eprintln!("Please build with: ./build-webapp.sh release");
-    }
+    eprintln!("╔════════════════════════════════════════════════════════════╗");
+    eprintln!("║           Worknest GUI - Web Application Only             ║");
+    eprintln!("╚════════════════════════════════════════════════════════════╝");
+    eprintln!();
+    eprintln!("This application runs as WebAssembly in a browser.");
+    eprintln!("It cannot be executed as a native binary.");
+    eprintln!();
+    eprintln!("To run the application:");
+    eprintln!("  trunk serve              # Development mode");
+    eprintln!("  trunk serve --release    # Production mode");
+    eprintln!();
+    eprintln!("The WASM entry point is: src/app.rs::start()");
+    std::process::exit(1);
 }

@@ -269,11 +269,11 @@ impl eframe::App for WorknestApp {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn start() {
-    // Initialize panic hook for better error messages
+    // Initialize panic hook for better error messages (safe to call multiple times)
     console_error_panic_hook::set_once();
 
-    // Setup logging
-    tracing_wasm::set_as_global_default();
+    // Setup logging - ignore error if already initialized (e.g., during hot reload)
+    let _ = tracing_wasm::try_set_as_global_default();
 
     tracing::info!("Starting Worknest (Web)");
 

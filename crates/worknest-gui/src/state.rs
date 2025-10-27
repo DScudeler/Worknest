@@ -4,6 +4,9 @@ use crate::api_client::ApiClient;
 use crate::screens::Screen;
 use worknest_core::models::{Project, Ticket, User};
 
+// Use web_time::Instant for WASM compatibility instead of std::time::Instant
+use web_time::Instant;
+
 /// Main application state
 #[derive(Clone)]
 pub struct AppState {
@@ -75,7 +78,7 @@ impl AppState {
         self.notifications.push(Notification {
             message,
             level,
-            timestamp: std::time::Instant::now(),
+            timestamp: Instant::now(),
         });
 
         // Keep only last 10 notifications
@@ -86,7 +89,7 @@ impl AppState {
 
     /// Clear old notifications (older than 5 seconds)
     pub fn clear_old_notifications(&mut self) {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         self.notifications
             .retain(|n| now.duration_since(n.timestamp).as_secs() < 5);
     }
@@ -112,7 +115,7 @@ impl AppState {
 pub struct Notification {
     pub message: String,
     pub level: NotificationLevel,
-    pub timestamp: std::time::Instant,
+    pub timestamp: Instant,
 }
 
 /// Notification level

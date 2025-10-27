@@ -6,8 +6,8 @@
     <meta name="description" content="Worknest - Modern project and ticket management">
     <title>Worknest</title>
 
-    <!-- Trunk: Build the 'worknest' binary from worknest-gui crate -->
-    <link data-trunk rel="rust" data-bin="worknest" />
+    <!-- Trunk: Build the worknest-gui library -->
+    <link data-trunk rel="rust" data-target-name="worknest_gui" data-wasm-opt="0" />
 
     <style>
         html, body {
@@ -59,9 +59,21 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Hide loading screen when app loads */
-        .loaded #loading {
+        /* Error display */
+        #error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #ff6b6b;
             display: none;
+            max-width: 600px;
+            padding: 20px;
+        }
+
+        #error.visible {
+            display: block;
         }
     </style>
 </head>
@@ -72,14 +84,25 @@
         <p>Loading application...</p>
     </div>
 
+    <div id="error">
+        <h2>⚠️ Error Loading Application</h2>
+        <p id="error-message"></p>
+    </div>
+
     <canvas id="worknest_canvas"></canvas>
 
-    <script>
-        // Hide loading screen when WASM loads
+    <script type="module">
+        // The start() function is called automatically via #[wasm_bindgen(start)]
+        // No manual initialization needed
+
+        // Log when WASM module loads
+        window.addEventListener('TrunkApplicationStarted', () => {
+            console.log('WASM module loaded - start() will be called automatically');
+        });
+
+        // Log when DOM is ready
         window.addEventListener('load', () => {
-            setTimeout(() => {
-                document.body.classList.add('loaded');
-            }, 100);
+            console.log('DOM fully loaded - WASM should initialize shortly');
         });
     </script>
 </body>
