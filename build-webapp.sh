@@ -149,19 +149,11 @@ cat > "$DIST_DIR/index.html" << 'EOF'
 
                 // Initialize WASM module
                 // The start() function runs automatically thanks to #[wasm_bindgen(start)]
-                // The Rust code will hide the loading screen once eframe is ready
+                // The Rust code will hide the loading screen on first frame render
                 console.log('Calling init()...');
                 await init();
                 console.log('WASM module initialized successfully');
-
-                // Fallback: hide loading screen after 3 seconds if Rust code doesn't do it
-                setTimeout(() => {
-                    const loading = document.getElementById('loading');
-                    if (loading && loading.style.display !== 'none') {
-                        console.warn('Loading screen still visible after 3s, hiding it now');
-                        loading.style.display = 'none';
-                    }
-                }, 3000);
+                console.log('Loading screen will be hidden by Rust code on first frame render');
             } catch (error) {
                 console.error('Failed to initialize:', error);
                 document.getElementById('loading').style.display = 'none';
