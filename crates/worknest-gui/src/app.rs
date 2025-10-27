@@ -30,11 +30,15 @@ pub struct WorknestApp {
     ticket_list_screen: Option<TicketListScreen>,
     ticket_board_screen: Option<TicketBoardScreen>,
     ticket_detail_screen: Option<TicketDetailScreen>,
+    // Track if this is the first frame to hide loading screen
+    first_frame: bool,
 }
 
 impl WorknestApp {
     /// Create web app with API client
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        tracing::info!("WorknestApp::new() called - initializing application");
+
         // Get API URL from window.location or environment
         let api_url = web_sys::window()
             .and_then(|w| w.location().origin().ok())
@@ -59,6 +63,7 @@ impl WorknestApp {
             ticket_list_screen: None,
             ticket_board_screen: None,
             ticket_detail_screen: None,
+            first_frame: true,
         }
     }
 
@@ -134,6 +139,32 @@ impl WorknestApp {
 
 impl eframe::App for WorknestApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Hide loading screen on first frame (only on WASM)
+        #[cfg(target_arch = "wasm32")]
+        if self.first_frame {
+            self.first_frame = false;
+            tracing::info!(
+                "First frame! Current screen: {:?}",
+                self.state.current_screen
+            );
+            if let Some(window) = web_sys::window() {
+                if let Some(document) = window.document() {
+                    if let Some(loading) = document.get_element_by_id("loading") {
+                        let _ = loading.set_attribute("style", "display: none;");
+                        tracing::info!(
+                            "Loading screen hidden - login screen should now be visible"
+                        );
+                    } else {
+                        tracing::warn!("Could not find loading element!");
+                    }
+                } else {
+                    tracing::warn!("Could not get document!");
+                }
+            } else {
+                tracing::warn!("Could not get window!");
+            }
+        }
+
         // Apply theme
         self.theme.apply(ctx);
 
@@ -277,28 +308,8 @@ pub fn start() {
 
         match result {
             Ok(_) => {
-                tracing::info!("eframe started successfully!");
-
-                // Use setTimeout to hide loading screen after a short delay
-                // This ensures eframe has time to render at least one frame
-                if let Some(window) = web_sys::window() {
-                    let closure = wasm_bindgen::closure::Closure::once(move || {
-                        if let Some(window_inner) = web_sys::window() {
-                            if let Some(document) = window_inner.document() {
-                                if let Some(loading) = document.get_element_by_id("loading") {
-                                    let _ = loading.set_attribute("style", "display: none;");
-                                    tracing::info!("Loading screen hidden");
-                                }
-                            }
-                        }
-                    });
-
-                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                        closure.as_ref().unchecked_ref(),
-                        200, // Wait 200ms for first frame
-                    );
-                    closure.forget();
-                }
+                tracing::info!("eframe started successfully! Waiting for first frame to hide loading screen...");
+                // Loading screen will be hidden in App::update() on first frame
             },
             Err(e) => {
                 tracing::error!("Failed to start eframe: {:?}", e);
