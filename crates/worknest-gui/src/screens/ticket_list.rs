@@ -46,6 +46,18 @@ impl TicketListScreen {
             self.data_loaded = true;
         }
 
+        // Sync tickets from state
+        self.tickets = if let Some(project_id) = self.project_id {
+            state
+                .demo_tickets
+                .iter()
+                .filter(|t| t.project_id == project_id)
+                .cloned()
+                .collect()
+        } else {
+            state.demo_tickets.clone()
+        };
+
         if self.show_create_dialog {
             self.render_create_dialog(ctx, state);
         }
@@ -332,15 +344,59 @@ impl TicketListScreen {
                 self.clear_create_form();
                 self.load_tickets(state);
             } else {
-                // Integrated mode: Call API
-                // TODO: Implement API call when backend is ready
-                // wasm_bindgen_futures::spawn_local(async move {
-                //     match state.api_client.create_ticket(ticket).await {
-                //         Ok(created_ticket) => { /* handle success */ },
-                //         Err(e) => { /* handle error */ },
-                //     }
-                // });
-                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+                // Integrated mode: Call real API
+                let api_client = state.api_client.clone();
+                let event_queue = state.event_queue.clone();
+                let token = match &state.auth_token {
+                    Some(t) => t.clone(),
+                    None => {
+                        state.notify_error("Not authenticated".to_string());
+                        return;
+                    }
+                };
+
+                let project_id_uuid = project_id.0;
+                let title = self.new_ticket_title.clone();
+                let description = if self.new_ticket_description.is_empty() {
+                    None
+                } else {
+                    Some(self.new_ticket_description.clone())
+                };
+                let priority = self.new_ticket_priority.to_string().to_lowercase();
+                let ticket_type = self.new_ticket_type.to_string().to_lowercase();
+
+                // Clear form and close dialog
+                self.show_create_dialog = false;
+                self.clear_create_form();
+                state.is_loading = true;
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::api_client::CreateTicketRequest;
+                    use crate::events::AppEvent;
+
+                    let request = CreateTicketRequest {
+                        project_id: project_id_uuid,
+                        title,
+                        description,
+                        priority,
+                        ticket_type,
+                    };
+
+                    match api_client.create_ticket(&token, request).await {
+                        Ok(created_ticket) => {
+                            tracing::info!("Ticket created successfully: {}", created_ticket.title);
+                            event_queue.push(AppEvent::TicketCreated {
+                                ticket: created_ticket,
+                            });
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to create ticket: {:?}", e);
+                            event_queue.push(AppEvent::TicketError {
+                                message: e.to_string(),
+                            });
+                        }
+                    }
+                });
             }
         }
     }
@@ -367,14 +423,30 @@ impl TicketListScreen {
             };
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.get_tickets(self.project_id).await {
-            //         Ok(tickets) => { /* update self.tickets */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            self.tickets = Vec::new();
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => return,
+            };
+            let project_id_uuid = self.project_id.map(|pid| pid.0);
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.get_tickets(&token, project_id_uuid).await {
+                    Ok(tickets) => {
+                        tracing::info!("Loaded {} tickets", tickets.len());
+                        event_queue.push(AppEvent::TicketsLoaded { tickets });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load tickets: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
         }
     }
 }

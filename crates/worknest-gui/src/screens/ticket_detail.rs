@@ -44,6 +44,15 @@ impl TicketDetailScreen {
             self.data_loaded = true;
         }
 
+        // Sync ticket from state
+        if self.ticket.is_none() || !state.is_demo_mode() {
+            self.ticket = state
+                .demo_tickets
+                .iter()
+                .find(|t| t.id == self.ticket_id)
+                .cloned();
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(Spacing::LARGE);
@@ -73,9 +82,7 @@ impl TicketDetailScreen {
                                         .add(egui::Button::new("Delete").fill(Colors::ERROR))
                                         .clicked()
                                     {
-                                        // TODO: API delete ticket
-                                        state
-                                            .notify_info("API integration in progress".to_string());
+                                        self.delete_ticket(state, &ticket);
                                     }
                                 },
                             );
@@ -318,21 +325,59 @@ impl TicketDetailScreen {
                     self.load_data(state);
                 }
             } else {
-                // Integrated mode: Call API
-                // TODO: Implement API call when backend is ready
-                // wasm_bindgen_futures::spawn_local(async move {
-                //     match state.api_client.update_ticket(&ticket).await {
-                //         Ok(_) => {
-                //             state.notify_success("Ticket updated".to_string());
-                //             self.is_editing = false;
-                //             self.load_data(state);
-                //         },
-                //         Err(e) => {
-                //             state.notify_error(format!("Failed to update ticket: {:?}", e));
-                //         },
-                //     }
-                // });
-                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+                // Integrated mode: Call real API
+                let api_client = state.api_client.clone();
+                let event_queue = state.event_queue.clone();
+                let token = match &state.auth_token {
+                    Some(t) => t.clone(),
+                    None => {
+                        state.notify_error("Not authenticated".to_string());
+                        return;
+                    }
+                };
+
+                let ticket_id_uuid = ticket.id.0;
+                let title = self.edit_title.clone();
+                let description = if self.edit_description.is_empty() {
+                    None
+                } else {
+                    Some(self.edit_description.clone())
+                };
+                let status = self.edit_status.to_string().to_lowercase();
+                let priority = self.edit_priority.to_string().to_lowercase();
+                let ticket_type = self.edit_type.to_string().to_lowercase();
+
+                self.is_editing = false;
+                state.is_loading = true;
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::api_client::UpdateTicketRequest;
+                    use crate::events::AppEvent;
+
+                    let request = UpdateTicketRequest {
+                        title: Some(title),
+                        description,
+                        status: Some(status),
+                        priority: Some(priority),
+                        ticket_type: Some(ticket_type),
+                        assigned_to: None,
+                    };
+
+                    match api_client.update_ticket(&token, ticket_id_uuid, request).await {
+                        Ok(updated_ticket) => {
+                            tracing::info!("Ticket updated successfully: {}", updated_ticket.title);
+                            event_queue.push(AppEvent::TicketUpdated {
+                                ticket: updated_ticket,
+                            });
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to update ticket: {:?}", e);
+                            event_queue.push(AppEvent::TicketError {
+                                message: e.to_string(),
+                            });
+                        }
+                    }
+                });
             }
         }
     }
@@ -346,15 +391,102 @@ impl TicketDetailScreen {
                 self.load_data(state);
             }
         } else {
-            // Integrated mode: Call API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.update_ticket_status(self.ticket_id, new_status).await {
-            //         Ok(_) => { /* handle success */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+            // Integrated mode: Call real API
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => {
+                    state.notify_error("Not authenticated".to_string());
+                    return;
+                }
+            };
+
+            let ticket_id_uuid = self.ticket_id.0;
+            let status_string = new_status.to_string().to_lowercase();
+
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::api_client::UpdateTicketRequest;
+                use crate::events::AppEvent;
+
+                let request = UpdateTicketRequest {
+                    title: None,
+                    description: None,
+                    status: Some(status_string),
+                    priority: None,
+                    ticket_type: None,
+                    assigned_to: None,
+                };
+
+                match api_client.update_ticket(&token, ticket_id_uuid, request).await {
+                    Ok(updated_ticket) => {
+                        tracing::info!("Ticket status updated to: {:?}", updated_ticket.status);
+                        event_queue.push(AppEvent::TicketUpdated {
+                            ticket: updated_ticket,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to update ticket status: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+        }
+    }
+
+    fn delete_ticket(&mut self, state: &mut AppState, ticket: &Ticket) {
+        if state.is_demo_mode() {
+            // Demo mode: Remove from in-memory state
+            state.demo_tickets.retain(|t| t.id != ticket.id);
+            state.notify_success("Ticket deleted (Demo Mode)".to_string());
+            state.navigate_to(Screen::TicketList {
+                project_id: Some(ticket.project_id),
+            });
+        } else {
+            // Integrated mode: Call real API
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => {
+                    state.notify_error("Not authenticated".to_string());
+                    return;
+                }
+            };
+
+            let ticket_id_uuid = ticket.id.0;
+            let ticket_id_string = ticket.id.to_string();
+            let project_id = ticket.project_id;
+
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.delete_ticket(&token, ticket_id_uuid).await {
+                    Ok(_) => {
+                        tracing::info!("Ticket deleted successfully");
+                        event_queue.push(AppEvent::TicketDeleted {
+                            ticket_id: ticket_id_string,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete ticket: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+
+            // Navigate back to list immediately
+            state.navigate_to(Screen::TicketList {
+                project_id: Some(project_id),
+            });
         }
     }
 
@@ -368,14 +500,30 @@ impl TicketDetailScreen {
                 .cloned();
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.get_ticket(self.ticket_id).await {
-            //         Ok(ticket) => { /* update self.ticket */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            self.ticket = None;
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => return,
+            };
+            let ticket_id_uuid = self.ticket_id.0;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.get_ticket(&token, ticket_id_uuid).await {
+                    Ok(ticket) => {
+                        tracing::info!("Loaded ticket: {}", ticket.title);
+                        event_queue.push(AppEvent::TicketLoaded { ticket });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load ticket: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
         }
     }
 }

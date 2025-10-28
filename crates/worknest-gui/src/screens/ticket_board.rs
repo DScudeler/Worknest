@@ -32,6 +32,14 @@ impl TicketBoardScreen {
             self.data_loaded = true;
         }
 
+        // Sync tickets from state
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add_space(Spacing::LARGE);
 
@@ -169,14 +177,30 @@ impl TicketBoardScreen {
                 .collect();
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.get_tickets(Some(self.project_id)).await {
-            //         Ok(tickets) => { /* update self.tickets */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            self.tickets = Vec::new();
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => return,
+            };
+            let project_id_uuid = self.project_id.0;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.get_tickets(&token, Some(project_id_uuid)).await {
+                    Ok(tickets) => {
+                        tracing::info!("Loaded {} tickets for kanban board", tickets.len());
+                        event_queue.push(AppEvent::TicketsLoaded { tickets });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load tickets for board: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
         }
     }
 }
