@@ -156,32 +156,32 @@ async fn main() {
         // Projects
         .route("/api/projects", get(list_projects).post(create_project))
         .route(
-            "/api/projects/:id",
+            "/api/projects/{id}",
             get(get_project).put(update_project).delete(delete_project),
         )
-        .route("/api/projects/:id/archive", post(archive_project))
+        .route("/api/projects/{id}/archive", post(archive_project))
         // Tickets
         .route("/api/tickets", get(list_tickets).post(create_ticket))
         .route(
-            "/api/tickets/:id",
+            "/api/tickets/{id}",
             get(get_ticket).put(update_ticket).delete(delete_ticket),
         )
         // Comments
         .route(
-            "/api/tickets/:ticket_id/comments",
+            "/api/tickets/{ticket_id}/comments",
             get(list_comments_for_ticket).post(create_comment),
         )
         .route(
-            "/api/comments/:id",
+            "/api/comments/{id}",
             put(update_comment).delete(delete_comment),
         )
         // Attachments
         .route(
-            "/api/tickets/:ticket_id/attachments",
+            "/api/tickets/{ticket_id}/attachments",
             get(list_attachments_for_ticket).post(upload_attachment),
         )
         .route(
-            "/api/attachments/:id",
+            "/api/attachments/{id}",
             get(download_attachment).delete(delete_attachment),
         )
         .layer(middleware::from_fn_with_state(

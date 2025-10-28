@@ -19,6 +19,11 @@ impl ApiClient {
         }
     }
 
+    /// Create API client with default localhost URL for development
+    pub fn new_default() -> Self {
+        Self::new("http://localhost:3000".to_string())
+    }
+
     fn api_url(&self, path: &str) -> String {
         format!("{}/api{}", self.base_url, path)
     }

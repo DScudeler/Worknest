@@ -64,9 +64,32 @@ impl AppState {
 
     /// Login user with authentication token
     pub fn login(&mut self, user: User, token: String) {
-        self.current_user = Some(user);
-        self.auth_token = Some(token);
+        self.current_user = Some(user.clone());
+        self.auth_token = Some(token.clone());
+
+        // Persist to localStorage
+        use gloo_storage::{LocalStorage, Storage};
+        let _ = LocalStorage::set("auth_token", token);
+        let _ = LocalStorage::set("current_user", user);
+
         self.navigate_to(Screen::Dashboard);
+    }
+
+    /// Try to restore session from localStorage
+    pub fn try_restore_session(&mut self) -> bool {
+        use gloo_storage::{LocalStorage, Storage};
+
+        let token: Result<String, _> = LocalStorage::get("auth_token");
+        let user: Result<User, _> = LocalStorage::get("current_user");
+
+        if let (Ok(token), Ok(user)) = (token, user) {
+            self.current_user = Some(user);
+            self.auth_token = Some(token);
+            self.navigate_to(Screen::Dashboard);
+            true
+        } else {
+            false
+        }
     }
 
     /// Logout user

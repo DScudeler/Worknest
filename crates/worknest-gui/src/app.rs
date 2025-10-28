@@ -63,18 +63,17 @@ impl WorknestApp {
                 crate::app_mode::AppMode::Integrated
             });
 
-        // Get API URL from window.location or environment
-        let api_url = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .unwrap_or_else(|| "http://localhost:3000".to_string());
-
-        tracing::info!("API URL: {}", api_url);
-
-        // Create API client
-        let api_client = ApiClient::new(api_url);
+        // Create API client with default localhost URL
+        let api_client = ApiClient::new_default();
+        tracing::info!("API client configured for: http://localhost:3000");
 
         // Create application state with API client and mode
-        let state = AppState::new(api_client, app_mode);
+        let mut state = AppState::new(api_client, app_mode);
+
+        // Try to restore session from localStorage
+        if state.try_restore_session() {
+            tracing::info!("Session restored from localStorage");
+        }
 
         Self {
             state,
