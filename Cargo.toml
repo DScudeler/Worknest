@@ -43,7 +43,7 @@ refinery = { version = "0.9", features = ["rusqlite"] }
 # Authentication
 bcrypt = "0.17"
 jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
-rand = "0.8"
+rand = "0.9"
 
 # GUI (web-only)
 eframe = { version = "0.33", default-features = false, features = ["glow", "web_screen_reader"] }
