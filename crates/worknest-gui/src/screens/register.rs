@@ -162,45 +162,52 @@ impl RegisterScreen {
             return;
         }
 
-        // Demo mode: Create a demo user and auto-login
-        // TODO: Replace with real API call when backend is available
-        // let api_client = state.api_client.clone();
-        // let request = RegisterRequest {
-        //     username: self.username.clone(),
-        //     email: self.email.clone(),
-        //     password: self.password.clone(),
-        //     full_name: None,
-        // };
-        // wasm_bindgen_futures::spawn_local(async move {
-        //     match api_client.register(request).await {
-        //         Ok(response) => { /* handle success */ },
-        //         Err(e) => { /* handle error */ },
-        //     }
-        // });
+        // Check if running in demo mode
+        if state.is_demo_mode() {
+            // Demo mode: Create a demo user and auto-login
+            use worknest_core::models::User;
+            use worknest_core::models::UserId;
 
-        use worknest_core::models::User;
-        use worknest_core::models::UserId;
+            let demo_user = User {
+                id: UserId::new(),
+                username: self.username.clone(),
+                email: self.email.clone(),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            };
 
-        let demo_user = User {
-            id: UserId::new(),
-            username: self.username.clone(),
-            email: self.email.clone(),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
+            // Store in browser storage
+            use gloo_storage::{LocalStorage, Storage};
+            let _ = LocalStorage::set("auth_token", "demo_token");
+            let _ = LocalStorage::set("current_user", &demo_user);
 
-        // Store in browser storage
-        use gloo_storage::{LocalStorage, Storage};
-        let _ = LocalStorage::set("auth_token", "demo_token");
-        let _ = LocalStorage::set("current_user", &demo_user);
+            state.login(demo_user, "demo_token".to_string());
+            state.notify_success("Account created successfully! (Demo Mode)".to_string());
 
-        state.login(demo_user, "demo_token".to_string());
-        state.notify_success("Account created successfully! (Demo Mode)".to_string());
+            // Clear form
+            self.username.clear();
+            self.email.clear();
+            self.password.clear();
+            self.confirm_password.clear();
+        } else {
+            // Integrated mode: Call real API
+            // TODO: Implement actual API call when backend is ready
+            // let api_client = state.api_client.clone();
+            // let request = RegisterRequest {
+            //     username: self.username.clone(),
+            //     email: self.email.clone(),
+            //     password: self.password.clone(),
+            //     full_name: None,
+            // };
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match api_client.register(request).await {
+            //         Ok(response) => { /* handle success */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
 
-        // Clear form
-        self.username.clear();
-        self.email.clear();
-        self.password.clear();
-        self.confirm_password.clear();
+            state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+            self.error_message = Some("Backend integration pending - use ?mode=demo for testing".to_string());
+        }
     }
 }

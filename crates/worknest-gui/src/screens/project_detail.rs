@@ -284,36 +284,62 @@ impl ProjectDetailScreen {
                 Some(self.edit_color.clone())
             };
 
-            // TODO: API update project
-            // match state.api_client.update_project(&project).await {
-            //     Ok(_) => {
-            //         state.notify_success("Project updated".to_string());
-            //         self.is_editing = false;
-            //         self.load_data(state);
-            //     },
-            //     Err(e) => {
-            //         state.notify_error(format!("Failed to update project: {:?}", e));
-            //     },
-            // }
-            state.notify_info("API integration in progress".to_string());
+            if state.is_demo_mode() {
+                // Demo mode: Update in-memory state
+                if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                    *p = project;
+                    state.notify_success("Project updated (Demo Mode)".to_string());
+                    self.is_editing = false;
+                    self.load_data(state);
+                }
+            } else {
+                // Integrated mode: Call API
+                // TODO: Implement API call when backend is ready
+                // wasm_bindgen_futures::spawn_local(async move {
+                //     match state.api_client.update_project(&project).await {
+                //         Ok(_) => {
+                //             state.notify_success("Project updated".to_string());
+                //             self.is_editing = false;
+                //             self.load_data(state);
+                //         },
+                //         Err(e) => {
+                //             state.notify_error(format!("Failed to update project: {:?}", e));
+                //         },
+                //     }
+                // });
+                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+            }
         }
     }
 
     fn load_data(&mut self, state: &AppState) {
-        // Demo mode: Load from in-memory state
-        self.project = state
-            .demo_projects
-            .iter()
-            .find(|p| p.id == self.project_id)
-            .cloned();
+        if state.is_demo_mode() {
+            // Demo mode: Load from in-memory state
+            self.project = state
+                .demo_projects
+                .iter()
+                .find(|p| p.id == self.project_id)
+                .cloned();
 
-        // Load associated tickets
-        self.tickets = state
-            .demo_tickets
-            .iter()
-            .filter(|t| t.project_id == self.project_id)
-            .cloned()
-            .collect();
+            // Load associated tickets
+            self.tickets = state
+                .demo_tickets
+                .iter()
+                .filter(|t| t.project_id == self.project_id)
+                .cloned()
+                .collect();
+        } else {
+            // Integrated mode: Load from API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match state.api_client.get_project(self.project_id).await {
+            //         Ok(project) => { /* update self.project */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
+            self.project = None;
+            self.tickets = Vec::new();
+        }
     }
 }
 

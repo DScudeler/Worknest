@@ -159,12 +159,24 @@ impl TicketBoardScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
-        // Demo mode: Load from in-memory state
-        self.tickets = state
-            .demo_tickets
-            .iter()
-            .filter(|t| t.project_id == self.project_id)
-            .cloned()
-            .collect();
+        if state.is_demo_mode() {
+            // Demo mode: Load from in-memory state
+            self.tickets = state
+                .demo_tickets
+                .iter()
+                .filter(|t| t.project_id == self.project_id)
+                .cloned()
+                .collect();
+        } else {
+            // Integrated mode: Load from API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match state.api_client.get_tickets(Some(self.project_id)).await {
+            //         Ok(tickets) => { /* update self.tickets */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
+            self.tickets = Vec::new();
+        }
     }
 }

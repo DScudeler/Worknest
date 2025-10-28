@@ -1,6 +1,7 @@
 //! Application state management
 
 use crate::api_client::ApiClient;
+use crate::app_mode::AppMode;
 use crate::screens::Screen;
 use worknest_core::models::{Project, Ticket, User};
 
@@ -10,6 +11,8 @@ use web_time::Instant;
 /// Main application state
 #[derive(Clone)]
 pub struct AppState {
+    /// Application operating mode (demo or integrated)
+    pub app_mode: AppMode,
     /// Current authenticated user
     pub current_user: Option<User>,
     /// Authentication token
@@ -29,9 +32,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Create a new web application state with API client
-    pub fn new(api_client: ApiClient) -> Self {
+    /// Create a new web application state with API client and mode
+    pub fn new(api_client: ApiClient, app_mode: AppMode) -> Self {
         Self {
+            app_mode,
             current_user: None,
             auth_token: None,
             current_screen: Screen::Login,
@@ -41,6 +45,11 @@ impl AppState {
             demo_projects: Vec::new(),
             demo_tickets: Vec::new(),
         }
+    }
+
+    /// Check if running in demo mode
+    pub fn is_demo_mode(&self) -> bool {
+        self.app_mode.is_demo()
     }
 
     /// Navigate to a screen

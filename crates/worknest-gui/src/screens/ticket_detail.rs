@@ -309,33 +309,73 @@ impl TicketDetailScreen {
             ticket.status = self.edit_status;
             ticket.priority = self.edit_priority;
 
-            // TODO: API update ticket
-            // match state.api_client.update_ticket(&ticket).await {
-            //     Ok(_) => {
-            //         state.notify_success("Ticket updated".to_string());
-            //         self.is_editing = false;
-            //         self.load_data(state);
-            //     },
-            //     Err(e) => {
-            //         state.notify_error(format!("Failed to update ticket: {:?}", e));
-            //     },
-            // }
-            state.notify_info("API integration in progress".to_string());
+            if state.is_demo_mode() {
+                // Demo mode: Update in-memory state
+                if let Some(t) = state.demo_tickets.iter_mut().find(|t| t.id == ticket.id) {
+                    *t = ticket;
+                    state.notify_success("Ticket updated (Demo Mode)".to_string());
+                    self.is_editing = false;
+                    self.load_data(state);
+                }
+            } else {
+                // Integrated mode: Call API
+                // TODO: Implement API call when backend is ready
+                // wasm_bindgen_futures::spawn_local(async move {
+                //     match state.api_client.update_ticket(&ticket).await {
+                //         Ok(_) => {
+                //             state.notify_success("Ticket updated".to_string());
+                //             self.is_editing = false;
+                //             self.load_data(state);
+                //         },
+                //         Err(e) => {
+                //             state.notify_error(format!("Failed to update ticket: {:?}", e));
+                //         },
+                //     }
+                // });
+                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+            }
         }
     }
 
-    fn update_status(&mut self, state: &mut AppState, _new_status: TicketStatus) {
-        // TODO: API update status
-        // state.api_client.update_ticket_status(self.ticket_id, new_status)
-        state.notify_info("API integration in progress".to_string());
+    fn update_status(&mut self, state: &mut AppState, new_status: TicketStatus) {
+        if state.is_demo_mode() {
+            // Demo mode: Update in-memory state
+            if let Some(ticket) = state.demo_tickets.iter_mut().find(|t| t.id == self.ticket_id) {
+                ticket.status = new_status;
+                state.notify_success(format!("Ticket status updated to {:?} (Demo Mode)", new_status));
+                self.load_data(state);
+            }
+        } else {
+            // Integrated mode: Call API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match state.api_client.update_ticket_status(self.ticket_id, new_status).await {
+            //         Ok(_) => { /* handle success */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
+            state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+        }
     }
 
     fn load_data(&mut self, state: &AppState) {
-        // Demo mode: Load from in-memory state
-        self.ticket = state
-            .demo_tickets
-            .iter()
-            .find(|t| t.id == self.ticket_id)
-            .cloned();
+        if state.is_demo_mode() {
+            // Demo mode: Load from in-memory state
+            self.ticket = state
+                .demo_tickets
+                .iter()
+                .find(|t| t.id == self.ticket_id)
+                .cloned();
+        } else {
+            // Integrated mode: Load from API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match state.api_client.get_ticket(self.ticket_id).await {
+            //         Ok(ticket) => { /* update self.ticket */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
+            self.ticket = None;
+        }
     }
 }

@@ -223,18 +223,22 @@ impl DashboardScreen {
     }
 
     fn load_data(&mut self, state: &AppState) {
-        // Demo mode: Load from in-memory state
-        // TODO: Replace with API call when backend is available
-        // wasm_bindgen_futures::spawn_local(async move {
-        //     if let Some(token) = &state.auth_token {
-        //         match state.api_client.get_projects(token).await {
-        //             Ok(projects) => { /* update state */ },
-        //             Err(e) => { /* handle error */ },
-        //         }
-        //     }
-        // });
-
-        self.recent_projects = state.demo_projects.clone();
+        if state.is_demo_mode() {
+            // Demo mode: Load from in-memory state
+            self.recent_projects = state.demo_projects.clone();
+        } else {
+            // Integrated mode: Load from API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     if let Some(token) = &state.auth_token {
+            //         match state.api_client.get_projects(token).await {
+            //             Ok(projects) => { /* update state */ },
+            //             Err(e) => { /* handle error */ },
+            //         }
+            //     }
+            // });
+            self.recent_projects = Vec::new();
+        }
     }
 }
 

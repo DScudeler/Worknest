@@ -39,6 +39,30 @@ impl WorknestApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         tracing::info!("WorknestApp::new() called - initializing application");
 
+        // Parse app mode from URL parameter (?mode=demo or ?mode=integrated)
+        // Default to Integrated mode
+        let app_mode = web_sys::window()
+            .and_then(|w| w.location().search().ok())
+            .and_then(|search| {
+                if search.is_empty() {
+                    None
+                } else {
+                    // Parse URLSearchParams
+                    web_sys::UrlSearchParams::new_with_str(&search)
+                        .ok()
+                        .and_then(|params| params.get("mode"))
+                }
+            })
+            .map(|mode_str| {
+                let mode = crate::app_mode::AppMode::from_str(&mode_str);
+                tracing::info!("App mode from URL: {:?}", mode);
+                mode
+            })
+            .unwrap_or_else(|| {
+                tracing::info!("App mode: Integrated (default)");
+                crate::app_mode::AppMode::Integrated
+            });
+
         // Get API URL from window.location or environment
         let api_url = web_sys::window()
             .and_then(|w| w.location().origin().ok())
@@ -49,8 +73,8 @@ impl WorknestApp {
         // Create API client
         let api_client = ApiClient::new(api_url);
 
-        // Create application state with API client
-        let state = AppState::new(api_client);
+        // Create application state with API client and mode
+        let state = AppState::new(api_client, app_mode);
 
         Self {
             state,

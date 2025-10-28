@@ -92,6 +92,14 @@
     <canvas id="worknest_canvas"></canvas>
 
     <script type="module">
+        // Application Mode Configuration:
+        // - Integrated mode (default): Connects to real backend API
+        //   Usage: http://localhost:8080
+        //          http://localhost:8080?mode=integrated
+        //
+        // - Demo mode: Uses in-memory data, no backend needed
+        //   Usage: http://localhost:8080?mode=demo
+        //
         // The start() function is called automatically via #[wasm_bindgen(start)]
         // No manual initialization needed
 

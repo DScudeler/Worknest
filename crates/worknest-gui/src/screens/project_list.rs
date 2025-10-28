@@ -322,12 +322,24 @@ impl ProjectListScreen {
                 project.color = Some(self.new_project_color.clone());
             }
 
-            // Demo mode: Add to in-memory state
-            state.demo_projects.push(project);
-            state.notify_success("Project created successfully (Demo Mode)".to_string());
-            self.show_create_dialog = false;
-            self.clear_create_form();
-            self.load_projects(state);
+            if state.is_demo_mode() {
+                // Demo mode: Add to in-memory state
+                state.demo_projects.push(project);
+                state.notify_success("Project created successfully (Demo Mode)".to_string());
+                self.show_create_dialog = false;
+                self.clear_create_form();
+                self.load_projects(state);
+            } else {
+                // Integrated mode: Call API
+                // TODO: Implement API call when backend is ready
+                // wasm_bindgen_futures::spawn_local(async move {
+                //     match state.api_client.create_project(project).await {
+                //         Ok(created_project) => { /* handle success */ },
+                //         Err(e) => { /* handle error */ },
+                //     }
+                // });
+                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+            }
         }
     }
 
@@ -338,9 +350,20 @@ impl ProjectListScreen {
     }
 
     fn load_projects(&mut self, state: &AppState) {
-        // Demo mode: Load from in-memory state
-        // TODO: Replace with API call when backend is available
-        self.projects = state.demo_projects.clone();
+        if state.is_demo_mode() {
+            // Demo mode: Load from in-memory state
+            self.projects = state.demo_projects.clone();
+        } else {
+            // Integrated mode: Load from API
+            // TODO: Implement API call when backend is ready
+            // wasm_bindgen_futures::spawn_local(async move {
+            //     match state.api_client.get_projects().await {
+            //         Ok(projects) => { /* update self.projects */ },
+            //         Err(e) => { /* handle error */ },
+            //     }
+            // });
+            self.projects = Vec::new();
+        }
     }
 }
 
