@@ -140,6 +140,7 @@ impl ProjectListScreen {
         // Create the card and track button interactions
         let group_response = ui.group(|ui| {
                 ui.set_min_size([f32::INFINITY, 80.0].into());
+                ui.set_max_size([f32::INFINITY, 120.0].into());
 
                 let mut view_clicked = false;
                 let mut tickets_clicked = false;
@@ -204,22 +205,9 @@ impl ProjectListScreen {
             egui::Sense::click().union(egui::Sense::hover())
         );
 
-        // Apply hover styling with visual feedback
+        // Show hover feedback
         if card_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-
-            // Add subtle background color change on hover
-            let hover_fill = if ui.style().visuals.dark_mode {
-                egui::Color32::from_gray(50)
-            } else {
-                egui::Color32::from_gray(240)
-            };
-
-            ui.painter().rect_filled(
-                card_response.rect,
-                4.0,
-                hover_fill.linear_multiply(0.3),
-            );
         }
 
         // Handle button clicks first (they take priority)
