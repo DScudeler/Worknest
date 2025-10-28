@@ -7,7 +7,6 @@ pub mod error;
 
 pub use error::{ApiError, Result};
 
-// Placeholder: API modules will be implemented as part of MVP development
-// pub mod commands;
-// pub mod queries;
-// pub mod dto;
+// Re-export main application for tests
+#[cfg(test)]
+pub use crate::main::*;
