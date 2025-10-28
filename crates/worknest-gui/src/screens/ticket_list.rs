@@ -79,15 +79,21 @@ impl TicketListScreen {
                 ui.heading(RichText::new("Tickets").size(28.0));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.project_id.is_some()
-                        && ui
-                            .add_sized(
-                                [120.0, 32.0],
-                                egui::Button::new("+ New Ticket").fill(Colors::PRIMARY),
-                            )
-                            .clicked()
-                    {
+                    let button_enabled = self.project_id.is_some();
+                    let button = ui.add_enabled_ui(button_enabled, |ui| {
+                        ui.add_sized(
+                            [120.0, 32.0],
+                            egui::Button::new("+ New Ticket").fill(Colors::PRIMARY),
+                        )
+                    }).inner;
+
+                    if button.clicked() {
                         self.show_create_dialog = true;
+                    }
+
+                    // Show tooltip when button is disabled
+                    if !button_enabled {
+                        button.on_hover_text("Please select a specific project to create tickets.\nNavigate to a project first, then click 'View All Tickets'.");
                     }
                 });
             });
