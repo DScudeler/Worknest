@@ -133,8 +133,12 @@ impl DashboardScreen {
                     );
                 } else {
                     for project in self.recent_projects.iter().take(5) {
-                        ui.group(|ui| {
+                        // Create the card and track button interactions
+                        let group_response = ui.group(|ui| {
                             ui.set_min_size([f32::INFINITY, 60.0].into());
+
+                            let mut view_clicked = false;
+
                             ui.horizontal(|ui| {
                                 // Project color indicator
                                 if let Some(color) = &project.color {
@@ -156,7 +160,7 @@ impl DashboardScreen {
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
                                         if ui.button("View").clicked() {
-                                            state.navigate_to(Screen::ProjectDetail(project.id));
+                                            view_clicked = true;
                                         }
 
                                         if project.archived {
@@ -169,7 +173,41 @@ impl DashboardScreen {
                                     },
                                 );
                             });
+
+                            view_clicked
                         });
+
+                        // Extract the button click state
+                        let view_clicked = group_response.inner;
+
+                        // Make the entire card interactive with BOTH click and hover detection
+                        let card_response = group_response.response.interact(
+                            egui::Sense::click().union(egui::Sense::hover())
+                        );
+
+                        // Apply hover styling with visual feedback
+                        if card_response.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+
+                            // Add subtle background color change on hover
+                            let hover_fill = if ui.style().visuals.dark_mode {
+                                egui::Color32::from_gray(50)
+                            } else {
+                                egui::Color32::from_gray(240)
+                            };
+
+                            ui.painter().rect_filled(
+                                card_response.rect,
+                                4.0,
+                                hover_fill.linear_multiply(0.3),
+                            );
+                        }
+
+                        // Handle button click or card click
+                        if view_clicked || card_response.clicked() {
+                            state.navigate_to(Screen::ProjectDetail(project.id));
+                        }
+
                         ui.add_space(Spacing::SMALL);
                     }
                 }

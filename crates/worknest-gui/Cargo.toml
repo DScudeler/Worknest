@@ -56,3 +56,6 @@ gloo-storage = "0.3"
 reqwest = { version = "0.12", features = ["json"] }
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
 web-time = "1.1"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

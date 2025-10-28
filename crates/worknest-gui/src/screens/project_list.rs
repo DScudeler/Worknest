@@ -134,71 +134,118 @@ impl ProjectListScreen {
     }
 
     fn render_project_card(&mut self, ui: &mut egui::Ui, project: &Project, state: &mut AppState) {
-        ui.group(|ui| {
-            ui.set_min_size([f32::INFINITY, 80.0].into());
-            ui.horizontal(|ui| {
-                // Color indicator
-                if let Some(color) = &project.color {
-                    if let Ok(color_val) = parse_hex_color(color) {
-                        ui.colored_label(color_val, RichText::new("●").size(24.0));
-                    }
-                }
+        // Create the card and track button interactions
+        let group_response = ui.group(|ui| {
+                ui.set_min_size([f32::INFINITY, 80.0].into());
 
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(&project.name).size(18.0).strong());
-                    if let Some(desc) = &project.description {
-                        ui.label(RichText::new(desc).small().color(egui::Color32::GRAY));
-                    }
+                let mut view_clicked = false;
+                let mut tickets_clicked = false;
+                let mut board_clicked = false;
+                let mut archive_clicked = false;
 
-                    if project.archived {
-                        ui.label(
-                            RichText::new("Archived")
-                                .small()
-                                .color(egui::Color32::DARK_GRAY),
-                        );
-                    }
-                });
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("View").clicked() {
-                        state.navigate_to(Screen::ProjectDetail(project.id));
+                ui.horizontal(|ui| {
+                    // Color indicator
+                    if let Some(color) = &project.color {
+                        if let Ok(color_val) = parse_hex_color(color) {
+                            ui.colored_label(color_val, RichText::new("●").size(24.0));
+                        }
                     }
 
-                    if ui.button("Tickets").clicked() {
-                        state.navigate_to(Screen::TicketList {
-                            project_id: Some(project.id),
-                        });
-                    }
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(&project.name).size(18.0).strong());
+                        if let Some(desc) = &project.description {
+                            ui.label(RichText::new(desc).small().color(egui::Color32::GRAY));
+                        }
 
-                    if ui.button("Board").clicked() {
-                        state.navigate_to(Screen::TicketBoard {
-                            project_id: project.id,
-                        });
-                    }
+                        if project.archived {
+                            ui.label(
+                                RichText::new("Archived")
+                                    .small()
+                                    .color(egui::Color32::DARK_GRAY),
+                            );
+                        }
+                    });
 
-                    if project.archived {
-                        if ui.button("Unarchive").clicked() {
-                            // Demo mode: Update in-memory state
-                            if let Some(p) =
-                                state.demo_projects.iter_mut().find(|p| p.id == project.id)
-                            {
-                                p.archived = false;
-                                state.notify_success("Project unarchived".to_string());
-                                self.load_projects(state);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Action buttons
+                        if ui.button("View").clicked() {
+                            view_clicked = true;
+                        }
+
+                        if ui.button("Tickets").clicked() {
+                            tickets_clicked = true;
+                        }
+
+                        if ui.button("Board").clicked() {
+                            board_clicked = true;
+                        }
+
+                        if project.archived {
+                            if ui.button("Unarchive").clicked() {
+                                archive_clicked = true;
                             }
+                        } else if ui.button("Archive").clicked() {
+                            archive_clicked = true;
                         }
-                    } else if ui.button("Archive").clicked() {
-                        // Demo mode: Update in-memory state
-                        if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id)
-                        {
-                            p.archived = true;
-                            state.notify_success("Project archived".to_string());
-                            self.load_projects(state);
-                        }
-                    }
+                    });
                 });
+
+                (view_clicked, tickets_clicked, board_clicked, archive_clicked)
             });
-        });
+
+        // Extract the button click states
+        let (view_clicked, tickets_clicked, board_clicked, archive_clicked) = group_response.inner;
+
+        // Make the entire card interactive with BOTH click and hover detection
+        let card_response = group_response.response.interact(
+            egui::Sense::click().union(egui::Sense::hover())
+        );
+
+        // Apply hover styling with visual feedback
+        if card_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+
+            // Add subtle background color change on hover
+            let hover_fill = if ui.style().visuals.dark_mode {
+                egui::Color32::from_gray(50)
+            } else {
+                egui::Color32::from_gray(240)
+            };
+
+            ui.painter().rect_filled(
+                card_response.rect,
+                4.0,
+                hover_fill.linear_multiply(0.3),
+            );
+        }
+
+        // Handle button clicks first (they take priority)
+        if view_clicked {
+            state.navigate_to(Screen::ProjectDetail(project.id));
+        } else if tickets_clicked {
+            state.navigate_to(Screen::TicketList {
+                project_id: Some(project.id),
+            });
+        } else if board_clicked {
+            state.navigate_to(Screen::TicketBoard {
+                project_id: project.id,
+            });
+        } else if archive_clicked {
+            // Demo mode: Update in-memory state
+            if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                p.archived = !p.archived;
+                let msg = if p.archived {
+                    "Project archived"
+                } else {
+                    "Project unarchived"
+                };
+                state.notify_success(msg.to_string());
+                self.load_projects(state);
+            }
+        } else if card_response.clicked() {
+            // Only navigate if no button was clicked
+            state.navigate_to(Screen::ProjectDetail(project.id));
+        }
     }
 
     fn render_create_dialog(&mut self, ctx: &egui::Context, state: &mut AppState) {
