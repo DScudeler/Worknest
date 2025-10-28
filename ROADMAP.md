@@ -132,12 +132,18 @@ worknest/
 - [x] All MVP screens implemented (Login, Register, Dashboard, Projects, Tickets, Board, Settings)
 - [x] Unit tests (wasm-bindgen-test: 19 GUI tests + 26 repository tests = 45 tests)
 - [x] API client (Complete with full endpoint coverage)
-- [ ] Frontend-Backend integration (requires backend server deployment)
-- [ ] E2E integration tests (requires running backend)
-- [ ] User documentation (README, API docs, deployment guide)
+- [x] Backend API server deployed locally (port 3000)
+- [x] Dual-mode support (Demo/Integrated modes)
+- [x] Token persistence with localStorage
+- [x] Session auto-restore on app load
+- [x] API client configured for localhost:3000
+- [ ] Complete async state management for API calls
+- [ ] Full frontend-backend integration (auth, CRUD operations)
+- [ ] E2E integration tests
+- [x] API documentation (see docs/API_INTEGRATION.md)
 - [ ] Build and packaging scripts (Docker, releases)
 
-**Phase 1 Progress: ~85% Complete**
+**Phase 1 Progress: ~90% Complete**
 - ✅ Foundation: Authentication, models, app shell (100%)
 - ✅ UI: All 9 core screens implemented with theme system (100%)
 - ✅ Web Platform: WASM build working with trunk (100%)
@@ -145,8 +151,10 @@ worknest/
 - ✅ Backend: Full REST API with auth middleware (100%)
 - ✅ Data Layer: Repository pattern with SQLite (100%)
 - ✅ API Client: Complete HTTP client implementation (100%)
-- 🚧 Integration: Frontend-backend connection (requires deployment) (0%)
-- 🚧 Documentation: User guides and API docs (20%)
+- ✅ Backend Deployment: Local server running on port 3000 (100%)
+- ✅ Token Persistence: localStorage integration (100%)
+- 🚧 Integration: Async state management for API calls (50%)
+- ✅ Documentation: API integration guide complete (80%)
 - 🚧 Packaging: Docker and release automation (0%)
 
 ---
