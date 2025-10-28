@@ -539,13 +539,26 @@ impl From<Ticket> for TicketDto {
 async fn list_tickets(
     AuthUser(_user): AuthUser,
     State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<TicketDto>>, AppError> {
     let tickets = state.ticket_repo.find_all().map_err(|e| {
         tracing::error!("Failed to list tickets: {:?}", e);
         AppError::Internal("Failed to retrieve tickets".to_string())
     })?;
 
-    Ok(Json(tickets.into_iter().map(TicketDto::from).collect()))
+    // Filter by project_id if provided
+    let filtered_tickets = if let Some(project_id_str) = params.get("project_id") {
+        let project_id = ProjectId::from_string(project_id_str)
+            .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+        tickets.into_iter()
+            .filter(|t| t.project_id == project_id)
+            .collect()
+    } else {
+        tickets
+    };
+
+    Ok(Json(filtered_tickets.into_iter().map(TicketDto::from).collect()))
 }
 
 async fn get_ticket(

@@ -222,13 +222,16 @@ impl ApiClient {
 
     // Ticket endpoints
     pub async fn get_tickets(&self, token: &str, project_id: Option<Uuid>) -> Result<Vec<Ticket>> {
-        let url = if let Some(pid) = project_id {
-            self.api_url(&format!("/projects/{}/tickets", pid))
-        } else {
-            self.api_url("/tickets")
-        };
+        let url = self.api_url("/tickets");
 
-        let response = self.client.get(&url).bearer_auth(token).send().await?;
+        let mut request = self.client.get(&url).bearer_auth(token);
+
+        // Add project_id as query parameter if provided
+        if let Some(pid) = project_id {
+            request = request.query(&[("project_id", pid.to_string())]);
+        }
+
+        let response = request.send().await?;
 
         if response.status().is_success() {
             Ok(response.json().await?)
