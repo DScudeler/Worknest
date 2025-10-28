@@ -42,6 +42,20 @@ impl ProjectDetailScreen {
             self.data_loaded = true;
         }
 
+        // Sync project and tickets from state
+        self.project = state
+            .demo_projects
+            .iter()
+            .find(|p| p.id == self.project_id)
+            .cloned();
+
+        self.tickets = state
+            .demo_tickets
+            .iter()
+            .filter(|t| t.project_id == self.project_id)
+            .cloned()
+            .collect();
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(Spacing::LARGE);
@@ -330,15 +344,56 @@ impl ProjectDetailScreen {
                 .collect();
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.get_project(self.project_id).await {
-            //         Ok(project) => { /* update self.project */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            self.project = None;
-            self.tickets = Vec::new();
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => return,
+            };
+            let project_id_uuid = self.project_id.0;
+
+            // Load project
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.get_project(&token, project_id_uuid).await {
+                    Ok(project) => {
+                        tracing::info!("Loaded project: {}", project.name);
+                        event_queue.push(AppEvent::ProjectLoaded { project });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load project: {:?}", e);
+                        event_queue.push(AppEvent::ProjectError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+
+            // Load tickets for this project
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => return,
+            };
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.get_tickets(&token, Some(project_id_uuid)).await {
+                    Ok(tickets) => {
+                        tracing::info!("Loaded {} tickets for project", tickets.len());
+                        event_queue.push(AppEvent::TicketsLoaded { tickets });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load tickets: {:?}", e);
+                        event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
         }
     }
 }
