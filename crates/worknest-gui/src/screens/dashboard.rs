@@ -29,6 +29,9 @@ impl DashboardScreen {
             self.stats_loaded = true;
         }
 
+        // Sync projects from state (updated by event queue)
+        self.recent_projects = state.demo_projects.clone();
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(Spacing::LARGE);
@@ -228,16 +231,29 @@ impl DashboardScreen {
             self.recent_projects = state.demo_projects.clone();
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     if let Some(token) = &state.auth_token {
-            //         match state.api_client.get_projects(token).await {
-            //             Ok(projects) => { /* update state */ },
-            //             Err(e) => { /* handle error */ },
-            //         }
-            //     }
-            // });
-            self.recent_projects = Vec::new();
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+
+            if let Some(token) = &state.auth_token {
+                let token = token.clone();
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::events::AppEvent;
+
+                    match api_client.get_projects(&token).await {
+                        Ok(projects) => {
+                            tracing::info!("Loaded {} projects", projects.len());
+                            event_queue.push(AppEvent::ProjectsLoaded { projects });
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load projects: {:?}", e);
+                            event_queue.push(AppEvent::ProjectsLoaded {
+                                projects: Vec::new()
+                            });
+                        }
+                    }
+                });
+            }
         }
     }
 }

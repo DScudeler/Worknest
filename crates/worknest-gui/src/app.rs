@@ -162,6 +162,9 @@ impl WorknestApp {
 
 impl eframe::App for WorknestApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Process any pending events from async operations
+        self.state.process_events();
+
         // Hide loading screen on first frame (only on WASM)
         #[cfg(target_arch = "wasm32")]
         if self.first_frame {

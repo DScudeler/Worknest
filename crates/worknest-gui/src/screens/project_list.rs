@@ -49,6 +49,9 @@ impl ProjectListScreen {
             self.data_loaded = true;
         }
 
+        // Sync projects from state (updated by event queue)
+        self.projects = state.demo_projects.clone();
+
         // Show create dialog if open
         if self.show_create_dialog {
             self.render_create_dialog(ctx, state);
@@ -331,14 +334,42 @@ impl ProjectListScreen {
                 self.load_projects(state);
             } else {
                 // Integrated mode: Call API
-                // TODO: Implement API call when backend is ready
-                // wasm_bindgen_futures::spawn_local(async move {
-                //     match state.api_client.create_project(project).await {
-                //         Ok(created_project) => { /* handle success */ },
-                //         Err(e) => { /* handle error */ },
-                //     }
-                // });
-                state.notify_error("Integrated mode: Backend API not yet connected".to_string());
+                let api_client = state.api_client.clone();
+                let event_queue = state.event_queue.clone();
+
+                if let Some(token) = &state.auth_token {
+                    let token = token.clone();
+
+                    // Close dialog and clear form immediately
+                    self.show_create_dialog = false;
+                    self.clear_create_form();
+                    state.is_loading = true;
+
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::api_client::CreateProjectRequest;
+                        use crate::events::AppEvent;
+
+                        let request = CreateProjectRequest {
+                            name: project.name,
+                            description: project.description,
+                        };
+
+                        match api_client.create_project(&token, request).await {
+                            Ok(created_project) => {
+                                tracing::info!("Project created: {}", created_project.name);
+                                event_queue.push(AppEvent::ProjectCreated {
+                                    project: created_project,
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to create project: {:?}", e);
+                                event_queue.push(AppEvent::ProjectError {
+                                    message: e.to_string(),
+                                });
+                            }
+                        }
+                    });
+                }
             }
         }
     }
@@ -355,14 +386,29 @@ impl ProjectListScreen {
             self.projects = state.demo_projects.clone();
         } else {
             // Integrated mode: Load from API
-            // TODO: Implement API call when backend is ready
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match state.api_client.get_projects().await {
-            //         Ok(projects) => { /* update self.projects */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
-            self.projects = Vec::new();
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+
+            if let Some(token) = &state.auth_token {
+                let token = token.clone();
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::events::AppEvent;
+
+                    match api_client.get_projects(&token).await {
+                        Ok(projects) => {
+                            tracing::info!("Loaded {} projects", projects.len());
+                            event_queue.push(AppEvent::ProjectsLoaded { projects });
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load projects: {:?}", e);
+                            event_queue.push(AppEvent::ProjectsLoaded {
+                                projects: Vec::new(),
+                            });
+                        }
+                    }
+                });
+            }
         }
     }
 }

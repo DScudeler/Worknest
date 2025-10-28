@@ -312,12 +312,11 @@ pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
-    pub full_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginRequest {
-    pub username_or_email: String,
+    pub username: String,
     pub password: String,
 }
 

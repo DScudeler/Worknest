@@ -129,7 +129,7 @@ impl LoginScreen {
             // Store in browser storage
             use gloo_storage::{LocalStorage, Storage};
             let _ = LocalStorage::set("auth_token", "demo_token");
-            let _ = LocalStorage::set("current_user", &demo_user");
+            let _ = LocalStorage::set("current_user", &demo_user);
 
             state.login(demo_user, "demo_token".to_string());
             state.notify_success("Login successful! (Demo Mode)".to_string());
@@ -140,33 +140,40 @@ impl LoginScreen {
         } else {
             // Integrated mode: Call real API
             let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
             let username = self.username.clone();
             let password = self.password.clone();
 
+            // Clear form and show loading
+            self.username.clear();
+            self.password.clear();
+            state.is_loading = true;
+
             wasm_bindgen_futures::spawn_local(async move {
                 use crate::api_client::LoginRequest;
+                use crate::events::AppEvent;
 
                 let request = LoginRequest {
-                    username_or_email: username,
+                    username,
                     password,
                 };
 
                 match api_client.login(request).await {
                     Ok(response) => {
                         tracing::info!("Login successful for user: {}", response.user.username);
-                        // Success handled by state.login() call
-                        // This needs to be propagated back to UI somehow...
-                        // For now, we just log it
+                        event_queue.push(AppEvent::LoginSuccess {
+                            user: response.user,
+                            token: response.token,
+                        });
                     }
                     Err(e) => {
                         tracing::error!("Login failed: {:?}", e);
-                        // Error needs to be propagated back to UI
+                        event_queue.push(AppEvent::LoginError {
+                            message: e.to_string(),
+                        });
                     }
                 }
             });
-
-            // For now show loading message
-            state.notify_info("Logging in...".to_string());
         }
     }
 }

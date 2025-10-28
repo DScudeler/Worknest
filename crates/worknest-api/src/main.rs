@@ -242,6 +242,8 @@ struct UserDto {
     id: String,
     username: String,
     email: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<User> for UserDto {
@@ -250,6 +252,8 @@ impl From<User> for UserDto {
             id: user.id.to_string(),
             username: user.username,
             email: user.email,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
         }
     }
 }

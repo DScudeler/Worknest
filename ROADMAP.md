@@ -137,13 +137,14 @@ worknest/
 - [x] Token persistence with localStorage
 - [x] Session auto-restore on app load
 - [x] API client configured for localhost:3000
-- [ ] Complete async state management for API calls
-- [ ] Full frontend-backend integration (auth, CRUD operations)
+- [x] Complete async state management for API calls (Event queue pattern)
+- [x] Full frontend-backend integration (auth, CRUD operations)
+- [x] Response body decoding fix (UserDto timestamp fields)
 - [ ] E2E integration tests
 - [x] API documentation (see docs/API_INTEGRATION.md)
 - [ ] Build and packaging scripts (Docker, releases)
 
-**Phase 1 Progress: ~90% Complete**
+**Phase 1 Progress: ~95% Complete**
 - ✅ Foundation: Authentication, models, app shell (100%)
 - ✅ UI: All 9 core screens implemented with theme system (100%)
 - ✅ Web Platform: WASM build working with trunk (100%)
@@ -153,8 +154,9 @@ worknest/
 - ✅ API Client: Complete HTTP client implementation (100%)
 - ✅ Backend Deployment: Local server running on port 3000 (100%)
 - ✅ Token Persistence: localStorage integration (100%)
-- 🚧 Integration: Async state management for API calls (50%)
-- ✅ Documentation: API integration guide complete (80%)
+- ✅ Integration: Async state management with event queue (100%)
+- ✅ API Contract: Request/response structures aligned (100%)
+- ✅ Documentation: API integration guide complete (100%)
 - 🚧 Packaging: Docker and release automation (0%)
 
 ---

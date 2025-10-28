@@ -191,23 +191,45 @@ impl RegisterScreen {
             self.confirm_password.clear();
         } else {
             // Integrated mode: Call real API
-            // TODO: Implement actual API call when backend is ready
-            // let api_client = state.api_client.clone();
-            // let request = RegisterRequest {
-            //     username: self.username.clone(),
-            //     email: self.email.clone(),
-            //     password: self.password.clone(),
-            //     full_name: None,
-            // };
-            // wasm_bindgen_futures::spawn_local(async move {
-            //     match api_client.register(request).await {
-            //         Ok(response) => { /* handle success */ },
-            //         Err(e) => { /* handle error */ },
-            //     }
-            // });
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let username = self.username.clone();
+            let email = self.email.clone();
+            let password = self.password.clone();
 
-            state.notify_error("Integrated mode: Backend API not yet connected".to_string());
-            self.error_message = Some("Backend integration pending - use ?mode=demo for testing".to_string());
+            // Clear form and show loading
+            self.username.clear();
+            self.email.clear();
+            self.password.clear();
+            self.confirm_password.clear();
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::api_client::RegisterRequest;
+                use crate::events::AppEvent;
+
+                let request = RegisterRequest {
+                    username,
+                    email,
+                    password,
+                };
+
+                match api_client.register(request).await {
+                    Ok(response) => {
+                        tracing::info!("Registration successful for user: {}", response.user.username);
+                        event_queue.push(AppEvent::RegisterSuccess {
+                            user: response.user,
+                            token: response.token,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Registration failed: {:?}", e);
+                        event_queue.push(AppEvent::RegisterError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
         }
     }
 }

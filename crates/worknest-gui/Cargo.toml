@@ -45,6 +45,7 @@ web-sys = { version = "0.3", features = [
     "HtmlCanvasElement",
     "Storage",
     "Location",
+    "UrlSearchParams",
     "Headers",
     "Request",
     "RequestInit",
