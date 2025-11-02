@@ -59,7 +59,8 @@ impl ToastManager {
         self.toasts.retain(|toast| {
             !toast.is_dismissed
                 && (toast.is_hovered
-                    || now.duration_since(toast.notification.timestamp) < self.auto_dismiss_duration)
+                    || now.duration_since(toast.notification.timestamp)
+                        < self.auto_dismiss_duration)
         });
     }
 
@@ -72,12 +73,8 @@ impl ToastManager {
         }
 
         // Position toasts in top-right corner
-        let screen_width = ctx.input(|i| {
-            i.viewport()
-                .inner_rect
-                .map(|r| r.width())
-                .unwrap_or(1024.0)
-        });
+        let screen_width =
+            ctx.input(|i| i.viewport().inner_rect.map(|r| r.width()).unwrap_or(1024.0));
 
         egui::Area::new("toast_container".into())
             .fixed_pos(egui::pos2(
@@ -128,17 +125,17 @@ impl Toast {
 
         let (bg_color, icon, icon_color) = match self.notification.level {
             NotificationLevel::Success => (
-                egui::Color32::from_rgb(22, 101, 52),  // Dark green
+                egui::Color32::from_rgb(22, 101, 52), // Dark green
                 "✓",
                 Colors::SUCCESS,
             ),
             NotificationLevel::Error => (
-                egui::Color32::from_rgb(127, 29, 29),  // Dark red
+                egui::Color32::from_rgb(127, 29, 29), // Dark red
                 "✕",
                 Colors::ERROR,
             ),
             NotificationLevel::Info => (
-                egui::Color32::from_rgb(30, 58, 138),  // Dark blue
+                egui::Color32::from_rgb(30, 58, 138), // Dark blue
                 "ℹ",
                 Colors::INFO,
             ),
@@ -156,20 +153,13 @@ impl Toast {
             .fill(bg_color)
             .corner_radius(8.0)
             .inner_margin(egui::Margin::same(Spacing::MEDIUM as i8))
-            .stroke(egui::Stroke::new(
-                1.0,
-                egui::Color32::from_white_alpha(30),
-            ))
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_white_alpha(30)))
             .show(ui, |ui| {
                 let response = ui
                     .horizontal(|ui| {
                         // Icon
                         ui.add_space(Spacing::SMALL);
-                        ui.label(
-                            RichText::new(icon)
-                                .size(20.0)
-                                .color(icon_color),
-                        );
+                        ui.label(RichText::new(icon).size(20.0).color(icon_color));
 
                         ui.add_space(Spacing::MEDIUM);
 
@@ -203,20 +193,17 @@ impl Toast {
                         });
 
                         // Close button
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                let close_response = ui.add(
-                                    egui::Button::new(RichText::new("×").size(18.0))
-                                        .fill(egui::Color32::TRANSPARENT)
-                                        .frame(false),
-                                );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_response = ui.add(
+                                egui::Button::new(RichText::new("×").size(18.0))
+                                    .fill(egui::Color32::TRANSPARENT)
+                                    .frame(false),
+                            );
 
-                                if close_response.clicked() {
-                                    dismissed = true;
-                                }
-                            },
-                        );
+                            if close_response.clicked() {
+                                dismissed = true;
+                            }
+                        });
                     })
                     .response;
 

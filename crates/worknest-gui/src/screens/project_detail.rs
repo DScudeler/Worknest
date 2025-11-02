@@ -198,9 +198,7 @@ impl ProjectDetailScreen {
                     let in_progress_count = self
                         .tickets
                         .iter()
-                        .filter(|t| {
-                            t.status == worknest_core::models::TicketStatus::InProgress
-                        })
+                        .filter(|t| t.status == worknest_core::models::TicketStatus::InProgress)
                         .count();
                     let review_count = self
                         .tickets
@@ -284,10 +282,12 @@ impl ProjectDetailScreen {
                                 );
                                 ui.add_space(Spacing::SMALL);
                                 ui.label(
-                                    RichText::new("Click '+ New Ticket' above to create your first ticket")
-                                        .small()
-                                        .color(egui::Color32::GRAY)
-                                        .italics(),
+                                    RichText::new(
+                                        "Click '+ New Ticket' above to create your first ticket",
+                                    )
+                                    .small()
+                                    .color(egui::Color32::GRAY)
+                                    .italics(),
                                 );
                                 ui.add_space(Spacing::XLARGE);
                             });
@@ -301,16 +301,16 @@ impl ProjectDetailScreen {
                                     let priority_color = match ticket.priority {
                                         worknest_core::models::Priority::Critical => {
                                             egui::Color32::from_rgb(220, 38, 38)
-                                        }
+                                        },
                                         worknest_core::models::Priority::High => {
                                             egui::Color32::from_rgb(234, 88, 12)
-                                        }
+                                        },
                                         worknest_core::models::Priority::Medium => {
                                             egui::Color32::from_rgb(59, 130, 246)
-                                        }
+                                        },
                                         worknest_core::models::Priority::Low => {
                                             egui::Color32::from_rgb(107, 114, 128)
-                                        }
+                                        },
                                     };
                                     ui.colored_label(priority_color, "●");
 
@@ -343,33 +343,29 @@ impl ProjectDetailScreen {
                                         _ => "📋",
                                     };
                                     ui.label(
-                                        RichText::new(type_icon)
-                                            .small()
-                                            .color(egui::Color32::GRAY),
+                                        RichText::new(type_icon).small().color(egui::Color32::GRAY),
                                     );
 
                                     // Status badge
                                     let (status_text, status_color) = match ticket.status {
                                         worknest_core::models::TicketStatus::Open => {
                                             ("Open", Colors::INFO)
-                                        }
+                                        },
                                         worknest_core::models::TicketStatus::InProgress => {
                                             ("In Progress", Colors::WARNING)
-                                        }
+                                        },
                                         worknest_core::models::TicketStatus::Review => {
                                             ("Review", Colors::PRIMARY)
-                                        }
+                                        },
                                         worknest_core::models::TicketStatus::Done => {
                                             ("Done", Colors::SUCCESS)
-                                        }
+                                        },
                                         worknest_core::models::TicketStatus::Closed => {
                                             ("Closed", egui::Color32::DARK_GRAY)
-                                        }
+                                        },
                                     };
                                     ui.label(
-                                        RichText::new(status_text)
-                                            .small()
-                                            .color(status_color),
+                                        RichText::new(status_text).small().color(status_color),
                                     );
 
                                     ui.add_space(Spacing::SMALL);
@@ -504,13 +500,13 @@ impl ProjectDetailScreen {
                             event_queue.push(AppEvent::ProjectUpdated {
                                 project: updated_project,
                             });
-                        }
+                        },
                         Err(e) => {
                             tracing::error!("Failed to update project: {:?}", e);
                             event_queue.push(AppEvent::ProjectError {
                                 message: e.to_string(),
                             });
-                        }
+                        },
                     }
                 });
             }
@@ -535,13 +531,13 @@ impl ProjectDetailScreen {
                 Ok(project) => {
                     tracing::info!("Loaded project: {}", project.name);
                     event_queue.push(AppEvent::ProjectLoaded { project });
-                }
+                },
                 Err(e) => {
                     tracing::error!("Failed to load project: {:?}", e);
                     event_queue.push(AppEvent::ProjectError {
                         message: e.to_string(),
                     });
-                }
+                },
             }
         });
 
@@ -560,13 +556,13 @@ impl ProjectDetailScreen {
                 Ok(tickets) => {
                     tracing::info!("Loaded {} tickets for project", tickets.len());
                     event_queue.push(AppEvent::TicketsLoaded { tickets });
-                }
+                },
                 Err(e) => {
                     tracing::error!("Failed to load tickets: {:?}", e);
                     event_queue.push(AppEvent::TicketError {
                         message: e.to_string(),
                     });
-                }
+                },
             }
         });
     }
@@ -701,13 +697,13 @@ impl ProjectDetailScreen {
                             event_queue.push(AppEvent::TicketCreated {
                                 ticket: created_ticket,
                             });
-                        }
+                        },
                         Err(e) => {
                             tracing::error!("Failed to create ticket: {:?}", e);
                             event_queue.push(AppEvent::TicketError {
                                 message: e.to_string(),
                             });
-                        }
+                        },
                     }
                 });
             }

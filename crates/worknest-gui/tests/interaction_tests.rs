@@ -85,8 +85,7 @@ fn test_ticket_board_card_click_interaction() {
 
     // Should have ui.interact() call (may be on multiple lines)
     assert!(
-        ticket_board_source.contains("ui.interact(") &&
-        ticket_board_source.contains("card_rect"),
+        ticket_board_source.contains("ui.interact(") && ticket_board_source.contains("card_rect"),
         "ticket_board.rs should use ui.interact() for card clicks"
     );
     assert!(
@@ -180,10 +179,19 @@ fn test_unique_interaction_ids() {
 fn test_hover_cursor_feedback() {
     // Test that all interactive cards show proper cursor feedback
     let screens = [
-        ("project_list.rs", include_str!("../src/screens/project_list.rs")),
+        (
+            "project_list.rs",
+            include_str!("../src/screens/project_list.rs"),
+        ),
         ("dashboard.rs", include_str!("../src/screens/dashboard.rs")),
-        ("ticket_list.rs", include_str!("../src/screens/ticket_list.rs")),
-        ("ticket_board.rs", include_str!("../src/screens/ticket_board.rs")),
+        (
+            "ticket_list.rs",
+            include_str!("../src/screens/ticket_list.rs"),
+        ),
+        (
+            "ticket_board.rs",
+            include_str!("../src/screens/ticket_board.rs"),
+        ),
     ];
 
     for (name, source) in screens.iter() {
@@ -244,7 +252,8 @@ fn test_button_click_priority() {
         "Should check view button click first"
     );
     assert!(
-        project_list_source.contains("} else if") && project_list_source.contains("card_response.clicked()"),
+        project_list_source.contains("} else if")
+            && project_list_source.contains("card_response.clicked()"),
         "Should check card click only if no button was clicked"
     );
 }
@@ -255,10 +264,19 @@ fn test_no_double_interaction_calls() {
     // This was the root cause of the original egui hit_test.rs panic
 
     let screens = [
-        ("project_list.rs", include_str!("../src/screens/project_list.rs")),
+        (
+            "project_list.rs",
+            include_str!("../src/screens/project_list.rs"),
+        ),
         ("dashboard.rs", include_str!("../src/screens/dashboard.rs")),
-        ("ticket_list.rs", include_str!("../src/screens/ticket_list.rs")),
-        ("ticket_board.rs", include_str!("../src/screens/ticket_board.rs")),
+        (
+            "ticket_list.rs",
+            include_str!("../src/screens/ticket_list.rs"),
+        ),
+        (
+            "ticket_board.rs",
+            include_str!("../src/screens/ticket_board.rs"),
+        ),
     ];
 
     for (name, source) in screens.iter() {

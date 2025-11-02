@@ -254,7 +254,8 @@ impl TicketListScreen {
 
         // Make the entire card area clickable
         let card_rect = group_response.response.rect;
-        let card_response = ui.interact(card_rect, ui.id().with("ticket_card"), egui::Sense::click());
+        let card_response =
+            ui.interact(card_rect, ui.id().with("ticket_card"), egui::Sense::click());
 
         if card_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -373,7 +374,7 @@ impl TicketListScreen {
                     None => {
                         state.notify_error("Not authenticated".to_string());
                         return;
-                    }
+                    },
                 };
 
                 let project_id_uuid = project_id.0;
@@ -409,13 +410,13 @@ impl TicketListScreen {
                             event_queue.push(AppEvent::TicketCreated {
                                 ticket: created_ticket,
                             });
-                        }
+                        },
                         Err(e) => {
                             tracing::error!("Failed to create ticket: {:?}", e);
                             event_queue.push(AppEvent::TicketError {
                                 message: e.to_string(),
                             });
-                        }
+                        },
                     }
                 });
             }
@@ -459,13 +460,13 @@ impl TicketListScreen {
                     Ok(tickets) => {
                         tracing::info!("Loaded {} tickets", tickets.len());
                         event_queue.push(AppEvent::TicketsLoaded { tickets });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to load tickets: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
         }

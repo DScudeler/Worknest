@@ -32,7 +32,9 @@ impl From<Sense> for SenseCapability {
     fn from(sense: Sense) -> Self {
         Self {
             can_click: sense.contains(Sense::CLICK),
-            can_hover: sense.contains(Sense::HOVER) || sense.contains(Sense::CLICK) || sense.contains(Sense::DRAG),
+            can_hover: sense.contains(Sense::HOVER)
+                || sense.contains(Sense::CLICK)
+                || sense.contains(Sense::DRAG),
             can_drag: sense.contains(Sense::DRAG),
         }
     }
@@ -94,10 +96,7 @@ impl UiTestContext {
 
     /// Check if an element is visible
     pub fn is_visible(&self, id: &str) -> bool {
-        self.elements
-            .get(id)
-            .map(|e| e.visible)
-            .unwrap_or(false)
+        self.elements.get(id).map(|e| e.visible).unwrap_or(false)
     }
 
     /// Check if an element can receive hover events
@@ -157,10 +156,10 @@ pub struct InteractionMatrix {
 
 #[derive(Debug, Clone)]
 pub enum UserAction {
-    Click(String),      // Click element with ID
+    Click(String),         // Click element with ID
     Input(String, String), // Input text into field with ID
-    Navigate(String),   // Navigate to screen
-    Hover(String),      // Hover over element
+    Navigate(String),      // Navigate to screen
+    Hover(String),         // Hover over element
 }
 
 #[derive(Debug, Clone)]
@@ -294,19 +293,22 @@ mod tests {
 
     #[test]
     fn test_interaction_matrix_builder() {
-        let matrix = InteractionMatrix::new("project_list", UserAction::Click("new_project_btn".to_string()))
-            .expects_state(ExpectedState {
-                screen_changed: false,
-                new_screen: None,
-                data_modified: false,
-                api_called: false,
-            })
-            .expects_ui(ExpectedUI {
-                elements_visible: vec!["create_dialog".to_string()],
-                elements_hidden: vec![],
-                elements_enabled: vec!["create_button".to_string()],
-                elements_disabled: vec![],
-            });
+        let matrix = InteractionMatrix::new(
+            "project_list",
+            UserAction::Click("new_project_btn".to_string()),
+        )
+        .expects_state(ExpectedState {
+            screen_changed: false,
+            new_screen: None,
+            data_modified: false,
+            api_called: false,
+        })
+        .expects_ui(ExpectedUI {
+            elements_visible: vec!["create_dialog".to_string()],
+            elements_hidden: vec![],
+            elements_enabled: vec!["create_button".to_string()],
+            elements_disabled: vec![],
+        });
 
         assert_eq!(matrix.screen, "project_list");
         assert_eq!(matrix.expected_ui.elements_visible.len(), 1);

@@ -10,7 +10,10 @@ fn test_shortcuts_help_initialization() {
     let shortcuts_help = ShortcutsHelp::new();
 
     // Should start closed
-    assert!(!shortcuts_help.is_open, "Shortcuts help should start closed");
+    assert!(
+        !shortcuts_help.is_open,
+        "Shortcuts help should start closed"
+    );
 
     // Should have registered shortcuts
     let shortcuts = shortcuts_help.shortcuts();
@@ -23,7 +26,10 @@ fn test_shortcuts_help_initialization() {
     let has_help_shortcut = shortcuts.iter().any(|s| {
         matches!(s.key, egui::Key::Questionmark) && s.description.contains("keyboard shortcuts")
     });
-    assert!(has_help_shortcut, "Should have help shortcut (?) registered");
+    assert!(
+        has_help_shortcut,
+        "Should have help shortcut (?) registered"
+    );
 
     let has_sidebar_toggle = shortcuts
         .iter()
@@ -131,10 +137,7 @@ fn test_shortcuts_by_category() {
     }
 
     // Should have expected categories
-    assert!(
-        categories.contains("Global"),
-        "Should have Global category"
-    );
+    assert!(categories.contains("Global"), "Should have Global category");
     assert!(
         categories.contains("Navigation"),
         "Should have Navigation category"
@@ -155,10 +158,7 @@ fn test_essential_shortcuts_registered() {
     let has_command_palette = shortcuts
         .iter()
         .any(|s| matches!(s.key, egui::Key::K) && s.description.contains("command palette"));
-    assert!(
-        has_command_palette,
-        "Should have command palette shortcut"
-    );
+    assert!(has_command_palette, "Should have command palette shortcut");
 
     // Navigation shortcuts
     let has_sidebar = shortcuts
@@ -167,9 +167,9 @@ fn test_essential_shortcuts_registered() {
     assert!(has_sidebar, "Should have sidebar navigation shortcut");
 
     // View shortcuts
-    let has_dashboard = shortcuts.iter().any(|s| {
-        matches!(s.key, egui::Key::Num1) && s.description.contains("Dashboard")
-    });
+    let has_dashboard = shortcuts
+        .iter()
+        .any(|s| matches!(s.key, egui::Key::Num1) && s.description.contains("Dashboard"));
     assert!(has_dashboard, "Should have dashboard view shortcut");
 
     let has_projects = shortcuts

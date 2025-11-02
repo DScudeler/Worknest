@@ -58,14 +58,14 @@ fn test_kanban_no_fixed_width_constraints() {
 
     // Should NOT have the old fixed constraints
     assert!(
-        !ticket_board_source.contains("set_min_width(250.0)") ||
-        ticket_board_source.contains("// Old pattern removed"),
+        !ticket_board_source.contains("set_min_width(250.0)")
+            || ticket_board_source.contains("// Old pattern removed"),
         "ticket_board.rs should not use fixed min_width(250.0)"
     );
 
     assert!(
-        !ticket_board_source.contains("set_max_width(300.0)") ||
-        ticket_board_source.contains("// Old pattern removed"),
+        !ticket_board_source.contains("set_max_width(300.0)")
+            || ticket_board_source.contains("// Old pattern removed"),
         "ticket_board.rs should not use fixed max_width(300.0)"
     );
 
@@ -93,8 +93,8 @@ fn test_kanban_full_height_columns() {
 
     // Should NOT use old fixed 600px height
     assert!(
-        !ticket_board_source.contains("max_height(600.0)") ||
-        ticket_board_source.contains("// Reserve space for header"),
+        !ticket_board_source.contains("max_height(600.0)")
+            || ticket_board_source.contains("// Reserve space for header"),
         "ticket_board.rs should not use fixed 600px height for column content"
     );
 }
@@ -112,8 +112,8 @@ fn test_kanban_column_background_styling() {
 
     // Should use Frame with background
     assert!(
-        ticket_board_source.contains("egui::Frame::NONE") ||
-        ticket_board_source.contains("egui::Frame::none()"),
+        ticket_board_source.contains("egui::Frame::NONE")
+            || ticket_board_source.contains("egui::Frame::none()"),
         "ticket_board.rs should use Frame for column styling"
     );
 
@@ -145,7 +145,8 @@ fn test_kanban_column_header_color_coding() {
     );
 
     assert!(
-        ticket_board_source.contains("TicketStatus::InProgress => (\"In Progress\", Colors::WARNING)"),
+        ticket_board_source
+            .contains("TicketStatus::InProgress => (\"In Progress\", Colors::WARNING)"),
         "ticket_board.rs should color InProgress columns with WARNING color"
     );
 
@@ -257,8 +258,8 @@ fn test_kanban_proper_spacing() {
 
     // Should have spacing between columns
     assert!(
-        ticket_board_source.contains("ui.add_space(Spacing::MEDIUM)") &&
-        ticket_board_source.contains("for (idx, status) in columns.iter().enumerate()"),
+        ticket_board_source.contains("ui.add_space(Spacing::MEDIUM)")
+            && ticket_board_source.contains("for (idx, status) in columns.iter().enumerate()"),
         "ticket_board.rs should add spacing between columns"
     );
 
@@ -276,8 +277,8 @@ fn test_kanban_unique_card_ids() {
 
     // Should use ticket ID in interaction ID
     assert!(
-        ticket_board_source.contains("ui.id().with((\"board_ticket_card\", ticket.id") ||
-        ticket_board_source.contains("ui.id().with(\"board_ticket_card\")"),
+        ticket_board_source.contains("ui.id().with((\"board_ticket_card\", ticket.id")
+            || ticket_board_source.contains("ui.id().with(\"board_ticket_card\")"),
         "ticket_board.rs should use unique IDs for card interactions"
     );
 
@@ -307,8 +308,8 @@ fn test_kanban_card_metadata() {
 
     // Should show description with ellipsis
     assert!(
-        ticket_board_source.contains("if desc.len() > 100") &&
-        ticket_board_source.contains("format!(\"{}...\", &desc[..100])"),
+        ticket_board_source.contains("if desc.len() > 100")
+            && ticket_board_source.contains("format!(\"{}...\", &desc[..100])"),
         "ticket_board.rs should truncate long descriptions with ellipsis"
     );
 }

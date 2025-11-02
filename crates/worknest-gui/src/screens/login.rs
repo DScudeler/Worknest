@@ -127,10 +127,7 @@ impl LoginScreen {
             use crate::api_client::LoginRequest;
             use crate::events::AppEvent;
 
-            let request = LoginRequest {
-                username,
-                password,
-            };
+            let request = LoginRequest { username, password };
 
             match api_client.login(request).await {
                 Ok(response) => {
@@ -139,13 +136,13 @@ impl LoginScreen {
                         user: response.user,
                         token: response.token,
                     });
-                }
+                },
                 Err(e) => {
                     tracing::error!("Login failed: {:?}", e);
                     event_queue.push(AppEvent::LoginError {
                         message: e.to_string(),
                     });
-                }
+                },
             }
         });
     }

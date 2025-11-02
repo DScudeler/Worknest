@@ -105,8 +105,19 @@ impl TicketBoardScreen {
         });
     }
 
-    fn render_column(&mut self, ui: &mut egui::Ui, status: TicketStatus, state: &mut AppState, column_width: f32) {
-        let column_tickets: Vec<_> = self.tickets.iter().filter(|t| t.status == status).cloned().collect();
+    fn render_column(
+        &mut self,
+        ui: &mut egui::Ui,
+        status: TicketStatus,
+        state: &mut AppState,
+        column_width: f32,
+    ) {
+        let column_tickets: Vec<_> = self
+            .tickets
+            .iter()
+            .filter(|t| t.status == status)
+            .cloned()
+            .collect();
 
         let (column_title, column_color) = match status {
             TicketStatus::Open => ("Open", Colors::INFO),
@@ -135,9 +146,8 @@ impl TicketBoardScreen {
                 .inner_margin(Spacing::MEDIUM)
                 .corner_radius(8.0);
 
-            let (drop_response, dropped_payload) = ui.dnd_drop_zone::<TicketDragPayload, ()>(
-                frame,
-                |ui| {
+            let (drop_response, dropped_payload) =
+                ui.dnd_drop_zone::<TicketDragPayload, ()>(frame, |ui| {
                     ui.set_width(column_width - Spacing::MEDIUM * 2.0);
 
                     // Column header
@@ -146,7 +156,7 @@ impl TicketBoardScreen {
                             RichText::new(column_title)
                                 .strong()
                                 .size(16.0)
-                                .color(column_color)
+                                .color(column_color),
                         );
                         ui.label(
                             RichText::new(format!("{} tickets", column_tickets.len()))
@@ -182,8 +192,7 @@ impl TicketBoardScreen {
                                 }
                             }
                         });
-                },
-            );
+                });
 
             // Handle dropped ticket
             if let Some(payload) = dropped_payload {
@@ -206,7 +215,13 @@ impl TicketBoardScreen {
     }
 
     /// Render a draggable card with drag and drop support
-    fn render_draggable_card(&mut self, ui: &mut egui::Ui, ticket: &Ticket, state: &mut AppState, current_status: TicketStatus) {
+    fn render_draggable_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        ticket: &Ticket,
+        state: &mut AppState,
+        current_status: TicketStatus,
+    ) {
         let drag_id = ui.id().with(("drag_ticket", ticket.id.0));
         let payload = TicketDragPayload {
             ticket_id: ticket.id,
@@ -244,7 +259,13 @@ impl TicketBoardScreen {
     }
 
     /// Render the card UI (extracted for reuse in drag source)
-    fn render_card_ui(&self, ui: &mut egui::Ui, ticket: &Ticket, state: &mut AppState, is_being_dragged: bool) -> egui::Response {
+    fn render_card_ui(
+        &self,
+        ui: &mut egui::Ui,
+        ticket: &Ticket,
+        state: &mut AppState,
+        is_being_dragged: bool,
+    ) -> egui::Response {
         let priority_color = match ticket.priority {
             Priority::Low => Colors::PRIORITY_LOW,
             Priority::Medium => Colors::PRIORITY_MEDIUM,
@@ -300,11 +321,7 @@ impl TicketBoardScreen {
                             } else {
                                 desc.clone()
                             };
-                            ui.label(
-                                RichText::new(preview)
-                                    .small()
-                                    .color(egui::Color32::GRAY),
-                            );
+                            ui.label(RichText::new(preview).small().color(egui::Color32::GRAY));
                         }
                     });
                 });
@@ -314,11 +331,7 @@ impl TicketBoardScreen {
                 // Metadata row
                 ui.horizontal(|ui| {
                     // Type badge
-                    ui.label(
-                        RichText::new(type_text)
-                            .small()
-                            .color(type_color)
-                    );
+                    ui.label(RichText::new(type_text).small().color(type_color));
 
                     ui.add_space(Spacing::SMALL);
 
@@ -329,11 +342,7 @@ impl TicketBoardScreen {
                         Priority::High => "High",
                         Priority::Critical => "Critical",
                     };
-                    ui.label(
-                        RichText::new(priority_text)
-                            .small()
-                            .color(priority_color)
-                    );
+                    ui.label(RichText::new(priority_text).small().color(priority_color));
                 });
 
                 ui.add_space(Spacing::SMALL);
@@ -349,7 +358,12 @@ impl TicketBoardScreen {
     }
 
     /// Handle ticket drop - update status via API with optimistic update
-    fn handle_ticket_drop(&mut self, payload: Arc<TicketDragPayload>, target_status: TicketStatus, state: &mut AppState) {
+    fn handle_ticket_drop(
+        &mut self,
+        payload: Arc<TicketDragPayload>,
+        target_status: TicketStatus,
+        state: &mut AppState,
+    ) {
         // Don't process if dropped in same column
         if payload.source_status == target_status {
             return;
@@ -357,7 +371,12 @@ impl TicketBoardScreen {
 
         let ticket_id = payload.ticket_id;
 
-        tracing::info!("Dropping ticket {:?} from {:?} to {:?}", ticket_id, payload.source_status, target_status);
+        tracing::info!(
+            "Dropping ticket {:?} from {:?} to {:?}",
+            ticket_id,
+            payload.source_status,
+            target_status
+        );
 
         // Optimistic update in state
         if let Some(ticket) = state.tickets.iter_mut().find(|t| t.id == ticket_id) {
@@ -373,17 +392,18 @@ impl TicketBoardScreen {
             None => {
                 tracing::error!("No auth token available for ticket update");
                 return;
-            }
+            },
         };
 
         // Convert status to string format expected by API
         let status_str = match target_status {
             TicketStatus::Open => "open",
-            TicketStatus::InProgress => "in progress",  // Backend now accepts both "inprogress" and "in progress"
+            TicketStatus::InProgress => "in progress", // Backend now accepts both "inprogress" and "in progress"
             TicketStatus::Review => "review",
             TicketStatus::Done => "done",
             TicketStatus::Closed => "closed",
-        }.to_string();
+        }
+        .to_string();
 
         wasm_bindgen_futures::spawn_local(async move {
             use crate::api_client::UpdateTicketRequest;
@@ -400,18 +420,21 @@ impl TicketBoardScreen {
 
             match api_client.update_ticket(&token, ticket_id.0, request).await {
                 Ok(updated_ticket) => {
-                    tracing::info!("Ticket status updated successfully: {:?}", updated_ticket.id);
+                    tracing::info!(
+                        "Ticket status updated successfully: {:?}",
+                        updated_ticket.id
+                    );
                     event_queue.push(AppEvent::TicketUpdated {
                         ticket: updated_ticket,
                     });
-                }
+                },
                 Err(e) => {
                     tracing::error!("Failed to update ticket status: {:?}", e);
                     // On error, reload the ticket to revert optimistic update
                     event_queue.push(AppEvent::TicketError {
                         message: format!("Failed to move ticket: {}", e),
                     });
-                }
+                },
             }
         });
     }
@@ -442,13 +465,13 @@ impl TicketBoardScreen {
                     Ok(tickets) => {
                         tracing::info!("Loaded {} tickets for kanban board", tickets.len());
                         event_queue.push(AppEvent::TicketsLoaded { tickets });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to load tickets for board: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
         }

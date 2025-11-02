@@ -121,13 +121,27 @@ fn e2e_complete_project_lifecycle() {
     if let Some(p) = state.projects.iter_mut().find(|p| p.id == project1.id) {
         p.archived = true;
     }
-    assert!(state.projects.iter().find(|p| p.id == project1.id).unwrap().archived);
+    assert!(
+        state
+            .projects
+            .iter()
+            .find(|p| p.id == project1.id)
+            .unwrap()
+            .archived
+    );
 
     // Unarchive project
     if let Some(p) = state.projects.iter_mut().find(|p| p.id == project1.id) {
         p.archived = false;
     }
-    assert!(!state.projects.iter().find(|p| p.id == project1.id).unwrap().archived);
+    assert!(
+        !state
+            .projects
+            .iter()
+            .find(|p| p.id == project1.id)
+            .unwrap()
+            .archived
+    );
 
     // Delete project
     state.projects.retain(|p| p.id != project2.id);
@@ -155,7 +169,10 @@ fn e2e_project_update_workflow() {
     // Verify updates
     let updated_project = state.projects.iter().find(|p| p.id == project.id).unwrap();
     assert_eq!(updated_project.name, "Updated Name");
-    assert_eq!(updated_project.description, Some("Updated description".to_string()));
+    assert_eq!(
+        updated_project.description,
+        Some("Updated description".to_string())
+    );
     assert_eq!(updated_project.color, Some("#FF5733".to_string()));
 }
 
@@ -200,7 +217,12 @@ fn e2e_complete_ticket_lifecycle() {
         t.status = TicketStatus::InProgress;
     }
     assert_eq!(
-        state.tickets.iter().find(|t| t.id == ticket.id).unwrap().status,
+        state
+            .tickets
+            .iter()
+            .find(|t| t.id == ticket.id)
+            .unwrap()
+            .status,
         TicketStatus::InProgress
     );
 
@@ -209,7 +231,12 @@ fn e2e_complete_ticket_lifecycle() {
         t.priority = Priority::Critical;
     }
     assert_eq!(
-        state.tickets.iter().find(|t| t.id == ticket.id).unwrap().priority,
+        state
+            .tickets
+            .iter()
+            .find(|t| t.id == ticket.id)
+            .unwrap()
+            .priority,
         Priority::Critical
     );
 
@@ -218,7 +245,12 @@ fn e2e_complete_ticket_lifecycle() {
         t.status = TicketStatus::Done;
     }
     assert_eq!(
-        state.tickets.iter().find(|t| t.id == ticket.id).unwrap().status,
+        state
+            .tickets
+            .iter()
+            .find(|t| t.id == ticket.id)
+            .unwrap()
+            .status,
         TicketStatus::Done
     );
 
@@ -366,29 +398,29 @@ fn e2e_complete_comment_workflow() {
     assert_eq!(state.comments.len(), 0);
 
     // Create first comment
-    let comment1 = worknest_core::models::Comment::new(
-        ticket.id,
-        user_id,
-        "First comment".to_string(),
-    );
+    let comment1 =
+        worknest_core::models::Comment::new(ticket.id, user_id, "First comment".to_string());
     state.comments.push(comment1.clone());
     assert_eq!(state.comments.len(), 1);
 
     // Create second comment
-    let comment2 = worknest_core::models::Comment::new(
-        ticket.id,
-        user_id,
-        "Second comment".to_string(),
-    );
+    let comment2 =
+        worknest_core::models::Comment::new(ticket.id, user_id, "Second comment".to_string());
     state.comments.push(comment2.clone());
     assert_eq!(state.comments.len(), 2);
 
     // Edit comment
     if let Some(c) = state.comments.iter_mut().find(|c| c.id == comment1.id) {
-        c.update_content("Updated first comment".to_string()).unwrap();
+        c.update_content("Updated first comment".to_string())
+            .unwrap();
     }
     assert_eq!(
-        state.comments.iter().find(|c| c.id == comment1.id).unwrap().content,
+        state
+            .comments
+            .iter()
+            .find(|c| c.id == comment1.id)
+            .unwrap()
+            .content,
         "Updated first comment"
     );
 
@@ -688,11 +720,8 @@ fn e2e_complete_user_journey() {
     }
 
     // 8. Add another comment
-    let comment2 = worknest_core::models::Comment::new(
-        ticket.id,
-        user.id,
-        "Completed the work".to_string(),
-    );
+    let comment2 =
+        worknest_core::models::Comment::new(ticket.id, user.id, "Completed the work".to_string());
     state.comments.push(comment2);
     assert_eq!(state.comments.len(), 2);
 
@@ -701,7 +730,12 @@ fn e2e_complete_user_journey() {
         t.status = TicketStatus::Done;
     }
     assert_eq!(
-        state.tickets.iter().find(|t| t.id == ticket.id).unwrap().status,
+        state
+            .tickets
+            .iter()
+            .find(|t| t.id == ticket.id)
+            .unwrap()
+            .status,
         TicketStatus::Done
     );
 
@@ -761,9 +795,9 @@ fn e2e_project_cascade_delete() {
     state.projects.retain(|p| p.id != project.id);
     state.tickets.retain(|t| t.project_id != project.id);
     // In a real implementation, comments would also be cascade deleted
-    state.comments.retain(|c| {
-        !state.tickets.iter().any(|t| t.id == c.ticket_id)
-    });
+    state
+        .comments
+        .retain(|c| !state.tickets.iter().any(|t| t.id == c.ticket_id));
 
     // Verify everything is deleted
     assert_eq!(state.projects.len(), 0);

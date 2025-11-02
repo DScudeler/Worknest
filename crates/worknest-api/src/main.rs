@@ -344,9 +344,7 @@ async fn list_users(
     Ok(Json(users.into_iter().map(UserDto::from).collect()))
 }
 
-async fn get_current_user(
-    AuthUser(user): AuthUser,
-) -> Result<Json<UserDto>, AppError> {
+async fn get_current_user(AuthUser(user): AuthUser) -> Result<Json<UserDto>, AppError> {
     Ok(Json(user.into()))
 }
 
@@ -630,25 +628,26 @@ async fn list_tickets(
                 };
                 priority_order(&a.priority).cmp(&priority_order(&b.priority))
             }),
-            _ => {} // Keep default order if invalid sort field
+            _ => {}, // Keep default order if invalid sort field
         }
     }
 
     // Apply pagination if provided
-    let limit = params.get("limit")
+    let limit = params
+        .get("limit")
         .and_then(|l| l.parse::<usize>().ok())
         .unwrap_or(usize::MAX);
 
-    let offset = params.get("offset")
+    let offset = params
+        .get("offset")
         .and_then(|o| o.parse::<usize>().ok())
         .unwrap_or(0);
 
-    let paginated_tickets: Vec<Ticket> = tickets.into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
+    let paginated_tickets: Vec<Ticket> = tickets.into_iter().skip(offset).take(limit).collect();
 
-    Ok(Json(paginated_tickets.into_iter().map(TicketDto::from).collect()))
+    Ok(Json(
+        paginated_tickets.into_iter().map(TicketDto::from).collect(),
+    ))
 }
 
 async fn get_ticket(
@@ -826,13 +825,16 @@ async fn search_tickets(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<TicketDto>>, AppError> {
-    let query = params.get("q")
+    let query = params
+        .get("q")
         .ok_or_else(|| AppError::BadRequest("Missing 'q' query parameter".to_string()))?;
 
     // Optional project_id filter
     let project_id = if let Some(project_id_str) = params.get("project_id") {
-        Some(ProjectId::from_string(project_id_str)
-            .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?)
+        Some(
+            ProjectId::from_string(project_id_str)
+                .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?,
+        )
     } else {
         None
     };

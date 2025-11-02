@@ -7,11 +7,11 @@
 //! 2. **State Layer**: State transitions and API call triggers
 //! 3. **Integration Layer**: Complete workflows across all layers
 
-pub mod ui_interaction;
 pub mod api_validation;
 pub mod state_transition;
+pub mod ui_interaction;
 
 // Re-export main testing utilities
-pub use ui_interaction::{UiTestContext, InteractionMatrix, ElementAvailability};
-pub use api_validation::{MockApiClient, ApiCallValidator, ExpectedCall};
-pub use state_transition::{StateTransitionValidator, ScreenValidator};
+pub use api_validation::{ApiCallValidator, ExpectedCall, MockApiClient};
+pub use state_transition::{ScreenValidator, StateTransitionValidator};
+pub use ui_interaction::{ElementAvailability, InteractionMatrix, UiTestContext};

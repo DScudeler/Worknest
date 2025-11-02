@@ -64,7 +64,10 @@ fn test_notifications() {
     for i in 0..15 {
         state.notify_info(format!("Notification {}", i));
     }
-    assert!(state.notifications.len() <= 10, "Notifications should be capped at 10");
+    assert!(
+        state.notifications.len() <= 10,
+        "Notifications should be capped at 10"
+    );
 }
 
 /// Test authentication state

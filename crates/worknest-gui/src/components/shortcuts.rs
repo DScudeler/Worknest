@@ -1,7 +1,7 @@
 //! Keyboard shortcuts system and help modal
 
-use egui::{Context, Key, Modifiers, RichText, Ui};
 use crate::theme::{Colors, Spacing};
+use egui::{Context, Key, Modifiers, RichText, Ui};
 
 /// Keyboard shortcut definition
 #[derive(Clone, Debug)]
@@ -232,11 +232,7 @@ impl ShortcutsHelp {
             .show(ctx, |ui| {
                 if let Some(content_rect) = ui.ctx().input(|i| i.viewport().inner_rect) {
                     let painter = ui.painter();
-                    painter.rect_filled(
-                        content_rect,
-                        0.0,
-                        egui::Color32::from_black_alpha(128),
-                    );
+                    painter.rect_filled(content_rect, 0.0, egui::Color32::from_black_alpha(128));
                 }
             });
 

@@ -53,13 +53,13 @@ impl Breadcrumb {
             Screen::Login | Screen::Register => {
                 // No breadcrumbs for auth screens
                 return vec![];
-            }
+            },
             Screen::Dashboard => {
                 items[0].is_current = true;
-            }
+            },
             Screen::ProjectList => {
                 items.push(BreadcrumbItem::current("Projects"));
-            }
+            },
             Screen::ProjectDetail(project_id) => {
                 items.push(BreadcrumbItem::new("Projects", Some(Screen::ProjectList)));
 
@@ -69,7 +69,7 @@ impl Breadcrumb {
                 } else {
                     items.push(BreadcrumbItem::current("Project"));
                 }
-            }
+            },
             Screen::TicketList { project_id } => {
                 if let Some(pid) = project_id {
                     items.push(BreadcrumbItem::new("Projects", Some(Screen::ProjectList)));
@@ -86,7 +86,7 @@ impl Breadcrumb {
                 } else {
                     items.push(BreadcrumbItem::current("All Tickets"));
                 }
-            }
+            },
             Screen::TicketBoard { project_id } => {
                 items.push(BreadcrumbItem::new("Projects", Some(Screen::ProjectList)));
 
@@ -99,7 +99,7 @@ impl Breadcrumb {
                 }
 
                 items.push(BreadcrumbItem::current("Board"));
-            }
+            },
             Screen::TicketDetail(ticket_id) => {
                 // Find ticket and its project
                 if let Some(ticket) = state.tickets.iter().find(|t| t.id == *ticket_id) {
@@ -124,10 +124,10 @@ impl Breadcrumb {
                 } else {
                     items.push(BreadcrumbItem::current("Ticket"));
                 }
-            }
+            },
             Screen::Settings => {
                 items.push(BreadcrumbItem::current("Settings"));
-            }
+            },
         }
 
         items

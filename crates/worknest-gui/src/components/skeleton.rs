@@ -1,7 +1,7 @@
 //! Skeleton loader components for loading states
 
-use egui::{Context, Ui, Vec2};
 use crate::theme::Spacing;
+use egui::{Context, Ui, Vec2};
 
 /// Skeleton loader for list items
 pub struct SkeletonLoader {
@@ -49,42 +49,24 @@ impl SkeletonLoader {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Avatar/Icon placeholder
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(40.0, 40.0),
-                        egui::Sense::hover(),
-                    );
-                    ui.painter().rect_filled(
-                        rect,
-                        4.0,
-                        shimmer_color,
-                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::new(40.0, 40.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                     ui.add_space(Spacing::MEDIUM);
 
                     ui.vertical(|ui| {
                         // Title line
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(200.0, 16.0),
-                            egui::Sense::hover(),
-                        );
-                        ui.painter().rect_filled(
-                            rect,
-                            4.0,
-                            shimmer_color,
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(200.0, 16.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                         ui.add_space(Spacing::SMALL);
 
                         // Description line
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(150.0, 12.0),
-                            egui::Sense::hover(),
-                        );
-                        ui.painter().rect_filled(
-                            rect,
-                            4.0,
-                            shimmer_color,
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(150.0, 12.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 4.0, shimmer_color);
                     });
                 });
             });
@@ -142,45 +124,35 @@ impl ProjectCardSkeleton {
 
                 ui.vertical(|ui| {
                     // Project name
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(180.0, 20.0),
-                        egui::Sense::hover(),
-                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::new(180.0, 20.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                     ui.add_space(Spacing::MEDIUM);
 
                     // Description
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(220.0, 14.0),
-                        egui::Sense::hover(),
-                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::new(220.0, 14.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                     ui.add_space(Spacing::SMALL);
 
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(180.0, 14.0),
-                        egui::Sense::hover(),
-                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::new(180.0, 14.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                     ui.add_space(Spacing::MEDIUM);
 
                     // Metadata
                     ui.horizontal(|ui| {
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(60.0, 12.0),
-                            egui::Sense::hover(),
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(60.0, 12.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                         ui.add_space(Spacing::MEDIUM);
 
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(80.0, 12.0),
-                            egui::Sense::hover(),
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(80.0, 12.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 4.0, shimmer_color);
                     });
                 });
@@ -236,10 +208,8 @@ impl TicketSkeletonLoader {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Priority indicator
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::new(4.0, 40.0),
-                        egui::Sense::hover(),
-                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(Vec2::new(4.0, 40.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 2.0, shimmer_color);
 
                     ui.add_space(Spacing::MEDIUM);
@@ -247,38 +217,30 @@ impl TicketSkeletonLoader {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             // Ticket ID
-                            let (rect, _) = ui.allocate_exact_size(
-                                Vec2::new(80.0, 14.0),
-                                egui::Sense::hover(),
-                            );
+                            let (rect, _) =
+                                ui.allocate_exact_size(Vec2::new(80.0, 14.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                             ui.add_space(Spacing::MEDIUM);
 
                             // Status badge
-                            let (rect, _) = ui.allocate_exact_size(
-                                Vec2::new(60.0, 14.0),
-                                egui::Sense::hover(),
-                            );
+                            let (rect, _) =
+                                ui.allocate_exact_size(Vec2::new(60.0, 14.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect, 4.0, shimmer_color);
                         });
 
                         ui.add_space(Spacing::SMALL);
 
                         // Title
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(250.0, 16.0),
-                            egui::Sense::hover(),
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(250.0, 16.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 4.0, shimmer_color);
 
                         ui.add_space(Spacing::SMALL);
 
                         // Assignee/date
-                        let (rect, _) = ui.allocate_exact_size(
-                            Vec2::new(150.0, 12.0),
-                            egui::Sense::hover(),
-                        );
+                        let (rect, _) =
+                            ui.allocate_exact_size(Vec2::new(150.0, 12.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 4.0, shimmer_color);
                     });
                 });

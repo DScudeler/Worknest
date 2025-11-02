@@ -192,7 +192,11 @@ impl DashboardScreen {
 
                         // Make the entire card area clickable
                         let card_rect = group_response.response.rect;
-                        let card_response = ui.interact(card_rect, ui.id().with("dashboard_project_card"), egui::Sense::click());
+                        let card_response = ui.interact(
+                            card_rect,
+                            ui.id().with("dashboard_project_card"),
+                            egui::Sense::click(),
+                        );
 
                         // Apply hover styling with visual feedback
                         if card_response.hovered() {
@@ -246,13 +250,13 @@ impl DashboardScreen {
                     Ok(projects) => {
                         tracing::info!("Loaded {} projects", projects.len());
                         event_queue.push(AppEvent::ProjectsLoaded { projects });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to load projects: {:?}", e);
                         event_queue.push(AppEvent::ProjectsLoaded {
-                            projects: Vec::new()
+                            projects: Vec::new(),
                         });
-                    }
+                    },
                 }
             });
         }

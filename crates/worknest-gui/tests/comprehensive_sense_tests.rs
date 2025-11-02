@@ -542,7 +542,9 @@ fn test_navigation_flow_comprehensive() {
         project_id: Some(project_id),
     });
     match state.current_screen {
-        Screen::TicketList { project_id: Some(pid) } => assert_eq!(pid, project_id),
+        Screen::TicketList {
+            project_id: Some(pid),
+        } => assert_eq!(pid, project_id),
         _ => panic!("Expected TicketList with project_id"),
     }
 

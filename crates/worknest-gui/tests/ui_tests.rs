@@ -89,9 +89,11 @@ fn test_ticket_list_navigation() {
     });
 
     match state.current_screen {
-        Screen::TicketList { project_id: Some(pid) } => {
+        Screen::TicketList {
+            project_id: Some(pid),
+        } => {
             assert_eq!(pid, project_id);
-        }
+        },
         _ => panic!("Expected TicketList screen with project_id"),
     }
 
@@ -99,7 +101,7 @@ fn test_ticket_list_navigation() {
     state.navigate_to(Screen::TicketList { project_id: None });
 
     match state.current_screen {
-        Screen::TicketList { project_id: None } => {}
+        Screen::TicketList { project_id: None } => {},
         _ => panic!("Expected TicketList screen without project_id"),
     }
 }
@@ -123,7 +125,7 @@ fn test_ticket_board_navigation() {
     match state.current_screen {
         Screen::TicketBoard { project_id: pid } => {
             assert_eq!(pid, project_id);
-        }
+        },
         _ => panic!("Expected TicketBoard screen"),
     }
 }
@@ -177,18 +179,10 @@ fn test_project_filtering() {
     assert_eq!(alpha_projects[0].name, "Alpha Project");
 
     // Test filtering by archived status
-    let active_projects: Vec<&Project> = state
-        .projects
-        .iter()
-        .filter(|p| !p.archived)
-        .collect();
+    let active_projects: Vec<&Project> = state.projects.iter().filter(|p| !p.archived).collect();
     assert_eq!(active_projects.len(), 2);
 
-    let archived_projects: Vec<&Project> = state
-        .projects
-        .iter()
-        .filter(|p| p.archived)
-        .collect();
+    let archived_projects: Vec<&Project> = state.projects.iter().filter(|p| p.archived).collect();
     assert_eq!(archived_projects.len(), 1);
 }
 
@@ -334,15 +328,21 @@ fn test_filter_comments_by_ticket() {
     let ticket2_id = TicketId::new();
 
     // Add comments for different tickets
-    state
-        .comments
-        .push(Comment::new(ticket1_id, user.id, "Comment for ticket 1".to_string()));
-    state
-        .comments
-        .push(Comment::new(ticket1_id, user.id, "Another comment for ticket 1".to_string()));
-    state
-        .comments
-        .push(Comment::new(ticket2_id, user.id, "Comment for ticket 2".to_string()));
+    state.comments.push(Comment::new(
+        ticket1_id,
+        user.id,
+        "Comment for ticket 1".to_string(),
+    ));
+    state.comments.push(Comment::new(
+        ticket1_id,
+        user.id,
+        "Another comment for ticket 1".to_string(),
+    ));
+    state.comments.push(Comment::new(
+        ticket2_id,
+        user.id,
+        "Comment for ticket 2".to_string(),
+    ));
 
     // Filter comments by ticket
     let ticket1_comments: Vec<&Comment> = state
@@ -588,9 +588,11 @@ fn test_project_detail_navigation_buttons() {
         project_id: Some(project_id),
     });
     match state.current_screen {
-        Screen::TicketList { project_id: Some(pid) } => {
+        Screen::TicketList {
+            project_id: Some(pid),
+        } => {
             assert_eq!(pid, project_id);
-        }
+        },
         _ => panic!("Expected TicketList screen"),
     }
 

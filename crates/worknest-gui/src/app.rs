@@ -8,7 +8,7 @@ use wasm_bindgen::JsCast;
 
 use crate::{
     api_client::ApiClient,
-    components::{Breadcrumb, CommandAction, CommandPalette, Sidebar, ShortcutsHelp, ToastManager},
+    components::{Breadcrumb, CommandAction, CommandPalette, ShortcutsHelp, Sidebar, ToastManager},
     screens::{
         DashboardScreen, LoginScreen, ProjectDetailScreen, ProjectListScreen, RegisterScreen,
         Screen, SettingsScreen, TicketBoardScreen, TicketDetailScreen, TicketListScreen,
@@ -296,16 +296,16 @@ impl WorknestApp {
         match action {
             CommandAction::Navigate(screen) => {
                 self.state.navigate_to(screen);
-            }
+            },
             CommandAction::ToggleSidebar => {
                 self.sidebar.toggle();
-            }
+            },
             CommandAction::ToggleTheme => {
                 self.theme = self.theme.toggle();
-            }
+            },
             CommandAction::ShowHelp => {
                 self.shortcuts_help.open();
-            }
+            },
         }
     }
 }

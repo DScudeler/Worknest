@@ -17,8 +17,8 @@ fn test_empty_state_creation() {
 
 #[wasm_bindgen_test]
 fn test_empty_state_with_cta() {
-    let empty_state = EmptyState::new("📁", "No Data", "Message")
-        .with_cta("Click Me", EmptyStateAction::Refresh);
+    let empty_state =
+        EmptyState::new("📁", "No Data", "Message").with_cta("Click Me", EmptyStateAction::Refresh);
 
     assert!(empty_state.cta.is_some());
     let cta = empty_state.cta.unwrap();
@@ -142,8 +142,8 @@ fn test_multiple_empty_states() {
 #[wasm_bindgen_test]
 fn test_empty_state_custom_with_multiple_ctas() {
     // Create base empty state
-    let state1 = EmptyState::new("🎯", "Title", "Message")
-        .with_cta("Action 1", EmptyStateAction::Refresh);
+    let state1 =
+        EmptyState::new("🎯", "Title", "Message").with_cta("Action 1", EmptyStateAction::Refresh);
 
     let state2 = EmptyState::new("🎯", "Title", "Message")
         .with_cta("Action 2", EmptyStateAction::CreateProject);
@@ -154,8 +154,8 @@ fn test_empty_state_custom_with_multiple_ctas() {
 
 #[wasm_bindgen_test]
 fn test_empty_state_chaining() {
-    let state = EmptyState::new("Icon", "Heading", "Message")
-        .with_cta("Button", EmptyStateAction::Refresh);
+    let state =
+        EmptyState::new("Icon", "Heading", "Message").with_cta("Button", EmptyStateAction::Refresh);
 
     assert_eq!(state.icon, "Icon");
     assert_eq!(state.heading, "Heading");

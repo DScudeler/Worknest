@@ -198,18 +198,21 @@ impl RegisterScreen {
 
             match api_client.register(request).await {
                 Ok(response) => {
-                    tracing::info!("Registration successful for user: {}", response.user.username);
+                    tracing::info!(
+                        "Registration successful for user: {}",
+                        response.user.username
+                    );
                     event_queue.push(AppEvent::RegisterSuccess {
                         user: response.user,
                         token: response.token,
                     });
-                }
+                },
                 Err(e) => {
                     tracing::error!("Registration failed: {:?}", e);
                     event_queue.push(AppEvent::RegisterError {
                         message: e.to_string(),
                     });
-                }
+                },
             }
         });
     }

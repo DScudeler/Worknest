@@ -1,7 +1,7 @@
 //! Tests for the command palette component
 
 use wasm_bindgen_test::*;
-use worknest_gui::components::{CommandPalette, CommandAction, CommandCategory};
+use worknest_gui::components::{CommandAction, CommandCategory, CommandPalette};
 
 wasm_bindgen_test_configure!(run_in_browser);
 

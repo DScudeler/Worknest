@@ -259,9 +259,11 @@ impl SettingsScreen {
 
                 ui.add_space(Spacing::SMALL);
                 ui.label(
-                    RichText::new("Note: Notification preferences will be saved in a future update")
-                        .color(egui::Color32::GRAY)
-                        .italics(),
+                    RichText::new(
+                        "Note: Notification preferences will be saved in a future update",
+                    )
+                    .color(egui::Color32::GRAY)
+                    .italics(),
                 );
             });
         });
@@ -282,9 +284,11 @@ impl SettingsScreen {
 
                 ui.add_space(Spacing::SMALL);
                 ui.label(
-                    RichText::new("Note: Default view preferences will be saved in a future update")
-                        .color(egui::Color32::GRAY)
-                        .italics(),
+                    RichText::new(
+                        "Note: Default view preferences will be saved in a future update",
+                    )
+                    .color(egui::Color32::GRAY)
+                    .italics(),
                 );
             });
         });
@@ -301,7 +305,9 @@ impl SettingsScreen {
                 ui.label("Version: 0.1.0 (MVP)");
                 ui.add_space(Spacing::SMALL);
 
-                ui.label("An open-source project and task manager built for software development teams.");
+                ui.label(
+                    "An open-source project and task manager built for software development teams.",
+                );
                 ui.add_space(Spacing::MEDIUM);
 
                 ui.label(RichText::new("Built with").strong());

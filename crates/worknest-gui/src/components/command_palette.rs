@@ -1,7 +1,11 @@
 //! Command palette for quick navigation and actions
 
+use crate::{
+    screens::Screen,
+    state::AppState,
+    theme::{Colors, Spacing},
+};
 use egui::{Context, Key, KeyboardShortcut, Modifiers, RichText, TextEdit};
-use crate::{screens::Screen, state::AppState, theme::{Colors, Spacing}};
 
 /// A command that can be executed from the palette
 #[derive(Clone, Debug)]
@@ -132,8 +136,10 @@ impl CommandPalette {
     pub fn add_dynamic_commands(&mut self, state: &AppState) {
         // Remove old dynamic commands (keep only the static ones)
         self.commands.retain(|cmd| {
-            !matches!(cmd.action, CommandAction::Navigate(Screen::ProjectDetail(_)))
-                && !matches!(cmd.action, CommandAction::Navigate(Screen::TicketDetail(_)))
+            !matches!(
+                cmd.action,
+                CommandAction::Navigate(Screen::ProjectDetail(_))
+            ) && !matches!(cmd.action, CommandAction::Navigate(Screen::TicketDetail(_)))
         });
 
         // Add project commands
@@ -219,9 +225,8 @@ impl CommandPalette {
     /// Check for keyboard shortcut and handle opening
     pub fn check_shortcut(&mut self, ctx: &Context) {
         // Check for Ctrl/Cmd+K
-        if ctx.input_mut(|i| {
-            i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::K))
-        }) {
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::K)))
+        {
             self.toggle();
         }
 
@@ -263,11 +268,7 @@ impl CommandPalette {
             .show(ctx, |ui| {
                 if let Some(content_rect) = ui.ctx().input(|i| i.viewport().inner_rect) {
                     let painter = ui.painter();
-                    painter.rect_filled(
-                        content_rect,
-                        0.0,
-                        egui::Color32::from_black_alpha(128),
-                    );
+                    painter.rect_filled(content_rect, 0.0, egui::Color32::from_black_alpha(128));
                 }
             });
 
@@ -324,17 +325,15 @@ impl CommandPalette {
                 if self.filtered_commands.is_empty() {
                     ui.vertical_centered(|ui| {
                         ui.add_space(Spacing::LARGE);
-                        ui.label(
-                            RichText::new("No commands found")
-                                .color(egui::Color32::GRAY),
-                        );
+                        ui.label(RichText::new("No commands found").color(egui::Color32::GRAY));
                         ui.add_space(Spacing::LARGE);
                     });
                 } else {
                     egui::ScrollArea::vertical()
                         .max_height(400.0)
                         .show(ui, |ui| {
-                            for (display_idx, &cmd_idx) in self.filtered_commands.iter().enumerate() {
+                            for (display_idx, &cmd_idx) in self.filtered_commands.iter().enumerate()
+                            {
                                 if let Some(cmd) = self.commands.get(cmd_idx) {
                                     let is_selected = display_idx == self.selected_index;
 
@@ -351,15 +350,13 @@ impl CommandPalette {
 
                                     // Render command content on top of button
                                     let button_rect = response.rect;
-                                    let mut child_ui = ui.new_child(egui::UiBuilder::new().max_rect(button_rect));
+                                    let mut child_ui =
+                                        ui.new_child(egui::UiBuilder::new().max_rect(button_rect));
                                     child_ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MEDIUM);
 
                                         // Category icon
-                                        ui.label(
-                                            RichText::new(cmd.category.icon())
-                                                .size(20.0),
-                                        );
+                                        ui.label(RichText::new(cmd.category.icon()).size(20.0));
 
                                         ui.add_space(Spacing::SMALL);
 

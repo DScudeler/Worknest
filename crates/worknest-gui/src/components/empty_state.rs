@@ -1,11 +1,11 @@
 //! Empty state components with call-to-action
 
-use egui::{RichText, Ui};
 use crate::{
     screens::Screen,
     state::AppState,
     theme::{Colors, Spacing},
 };
+use egui::{RichText, Ui};
 
 /// Empty state configuration
 pub struct EmptyState {
@@ -42,7 +42,11 @@ pub enum EmptyStateAction {
 
 impl EmptyState {
     /// Create a new empty state
-    pub fn new(icon: impl Into<String>, heading: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(
+        icon: impl Into<String>,
+        heading: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             icon: icon.into(),
             heading: heading.into(),
@@ -71,7 +75,7 @@ impl EmptyState {
             ui.label(
                 RichText::new(&self.icon)
                     .size(64.0)
-                    .color(egui::Color32::from_gray(100))
+                    .color(egui::Color32::from_gray(100)),
             );
 
             ui.add_space(Spacing::LARGE);
@@ -81,7 +85,7 @@ impl EmptyState {
                 RichText::new(&self.heading)
                     .size(24.0)
                     .strong()
-                    .color(Colors::TEXT_PRIMARY)
+                    .color(Colors::TEXT_PRIMARY),
             );
 
             ui.add_space(Spacing::MEDIUM);
@@ -90,18 +94,20 @@ impl EmptyState {
             ui.label(
                 RichText::new(&self.message)
                     .size(14.0)
-                    .color(Colors::TEXT_SECONDARY)
+                    .color(Colors::TEXT_SECONDARY),
             );
 
             ui.add_space(Spacing::LARGE);
 
             // CTA button
             if let Some(cta) = &self.cta {
-                if ui.add_sized(
-                    [150.0, 40.0],
-                    egui::Button::new(&cta.label)
-                        .fill(Colors::PRIMARY)
-                ).clicked() {
+                if ui
+                    .add_sized(
+                        [150.0, 40.0],
+                        egui::Button::new(&cta.label).fill(Colors::PRIMARY),
+                    )
+                    .clicked()
+                {
                     action = Some(cta.action.clone());
                 }
             }
@@ -122,7 +128,7 @@ impl EmptyStates {
         EmptyState::new(
             "📁",
             "No Projects Yet",
-            "Create your first project to get started with organizing your work"
+            "Create your first project to get started with organizing your work",
         )
         .with_cta("Create Project", EmptyStateAction::CreateProject)
     }
@@ -132,7 +138,7 @@ impl EmptyStates {
         EmptyState::new(
             "🎫",
             "No Tickets",
-            "No tickets found. Create a new ticket to track your work"
+            "No tickets found. Create a new ticket to track your work",
         )
         .with_cta("Create Ticket", EmptyStateAction::CreateTicket)
     }
@@ -142,7 +148,10 @@ impl EmptyStates {
         EmptyState::new(
             "🎫",
             "No Tickets in Project",
-            &format!("'{}' doesn't have any tickets yet. Create one to get started", project_name)
+            &format!(
+                "'{}' doesn't have any tickets yet. Create one to get started",
+                project_name
+            ),
         )
         .with_cta("Create Ticket", EmptyStateAction::CreateTicket)
     }
@@ -152,7 +161,7 @@ impl EmptyStates {
         EmptyState::new(
             "🔍",
             "No Results Found",
-            &format!("No results found for '{}'", query)
+            &format!("No results found for '{}'", query),
         )
     }
 
@@ -161,7 +170,7 @@ impl EmptyStates {
         EmptyState::new(
             "⚠️",
             "Failed to Load Data",
-            "Something went wrong while loading. Please try again"
+            "Something went wrong while loading. Please try again",
         )
         .with_cta("Retry", EmptyStateAction::Refresh)
     }
@@ -171,9 +180,12 @@ impl EmptyStates {
         EmptyState::new(
             "🔒",
             "Access Denied",
-            "You don't have permission to view this content"
+            "You don't have permission to view this content",
         )
-        .with_cta("Go to Dashboard", EmptyStateAction::Navigate(Screen::Dashboard))
+        .with_cta(
+            "Go to Dashboard",
+            EmptyStateAction::Navigate(Screen::Dashboard),
+        )
     }
 
     /// Not found (404)
@@ -181,9 +193,12 @@ impl EmptyStates {
         EmptyState::new(
             "❓",
             "Page Not Found",
-            "The page you're looking for doesn't exist"
+            "The page you're looking for doesn't exist",
         )
-        .with_cta("Go to Dashboard", EmptyStateAction::Navigate(Screen::Dashboard))
+        .with_cta(
+            "Go to Dashboard",
+            EmptyStateAction::Navigate(Screen::Dashboard),
+        )
     }
 
     /// Coming soon
@@ -191,7 +206,7 @@ impl EmptyStates {
         EmptyState::new(
             "🚧",
             "Coming Soon",
-            &format!("{} is currently under development", feature_name)
+            &format!("{} is currently under development", feature_name),
         )
     }
 
@@ -200,7 +215,7 @@ impl EmptyStates {
         EmptyState::new(
             "📦",
             "No Archived Items",
-            "Items you archive will appear here"
+            "Items you archive will appear here",
         )
     }
 }

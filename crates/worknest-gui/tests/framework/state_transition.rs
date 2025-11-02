@@ -38,8 +38,8 @@ impl StateTransitionValidator {
     /// Validate the transition
     pub fn validate(&self, state: &AppState) -> TransitionResult {
         let screen_correct = state.current_screen == self.expected_screen;
-        let notification_correct = !self.should_show_notification
-            || !state.notifications.is_empty();
+        let notification_correct =
+            !self.should_show_notification || !state.notifications.is_empty();
 
         TransitionResult {
             passed: screen_correct && notification_correct,
@@ -181,10 +181,7 @@ mod tests {
 
     #[test]
     fn test_state_transition_validation() {
-        let validator = StateTransitionValidator::new(
-            Screen::Login,
-            Screen::Dashboard,
-        );
+        let validator = StateTransitionValidator::new(Screen::Login, Screen::Dashboard);
 
         let api_client = ApiClient::new("http://localhost:3000".to_string());
         let mut state = AppState::new(api_client);
@@ -202,8 +199,7 @@ mod tests {
 
     #[test]
     fn test_screen_validator_authentication() {
-        let validator = ScreenValidator::for_screen(Screen::Dashboard)
-            .requires_authentication();
+        let validator = ScreenValidator::for_screen(Screen::Dashboard).requires_authentication();
 
         let api_client = ApiClient::new("http://localhost:3000".to_string());
         let state = AppState::new(api_client);

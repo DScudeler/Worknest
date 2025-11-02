@@ -139,70 +139,79 @@ impl ProjectListScreen {
     fn render_project_card(&mut self, ui: &mut egui::Ui, project: &Project, state: &mut AppState) {
         // Create the card and track button interactions
         let group_response = ui.group(|ui| {
-                ui.set_min_size([f32::INFINITY, 80.0].into());
-                ui.set_max_size([f32::INFINITY, 120.0].into());
+            ui.set_min_size([f32::INFINITY, 80.0].into());
+            ui.set_max_size([f32::INFINITY, 120.0].into());
 
-                let mut view_clicked = false;
-                let mut tickets_clicked = false;
-                let mut board_clicked = false;
-                let mut archive_clicked = false;
+            let mut view_clicked = false;
+            let mut tickets_clicked = false;
+            let mut board_clicked = false;
+            let mut archive_clicked = false;
 
-                ui.horizontal(|ui| {
-                    // Color indicator
-                    if let Some(color) = &project.color {
-                        if let Ok(color_val) = parse_hex_color(color) {
-                            ui.colored_label(color_val, RichText::new("●").size(24.0));
-                        }
+            ui.horizontal(|ui| {
+                // Color indicator
+                if let Some(color) = &project.color {
+                    if let Ok(color_val) = parse_hex_color(color) {
+                        ui.colored_label(color_val, RichText::new("●").size(24.0));
+                    }
+                }
+
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(&project.name).size(18.0).strong());
+                    if let Some(desc) = &project.description {
+                        ui.label(RichText::new(desc).small().color(egui::Color32::GRAY));
                     }
 
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(&project.name).size(18.0).strong());
-                        if let Some(desc) = &project.description {
-                            ui.label(RichText::new(desc).small().color(egui::Color32::GRAY));
-                        }
-
-                        if project.archived {
-                            ui.label(
-                                RichText::new("Archived")
-                                    .small()
-                                    .color(egui::Color32::DARK_GRAY),
-                            );
-                        }
-                    });
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Action buttons
-                        if ui.button("View").clicked() {
-                            view_clicked = true;
-                        }
-
-                        if ui.button("Tickets").clicked() {
-                            tickets_clicked = true;
-                        }
-
-                        if ui.button("Board").clicked() {
-                            board_clicked = true;
-                        }
-
-                        if project.archived {
-                            if ui.button("Unarchive").clicked() {
-                                archive_clicked = true;
-                            }
-                        } else if ui.button("Archive").clicked() {
-                            archive_clicked = true;
-                        }
-                    });
+                    if project.archived {
+                        ui.label(
+                            RichText::new("Archived")
+                                .small()
+                                .color(egui::Color32::DARK_GRAY),
+                        );
+                    }
                 });
 
-                (view_clicked, tickets_clicked, board_clicked, archive_clicked)
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Action buttons
+                    if ui.button("View").clicked() {
+                        view_clicked = true;
+                    }
+
+                    if ui.button("Tickets").clicked() {
+                        tickets_clicked = true;
+                    }
+
+                    if ui.button("Board").clicked() {
+                        board_clicked = true;
+                    }
+
+                    if project.archived {
+                        if ui.button("Unarchive").clicked() {
+                            archive_clicked = true;
+                        }
+                    } else if ui.button("Archive").clicked() {
+                        archive_clicked = true;
+                    }
+                });
             });
+
+            (
+                view_clicked,
+                tickets_clicked,
+                board_clicked,
+                archive_clicked,
+            )
+        });
 
         // Extract the button click states
         let (view_clicked, tickets_clicked, board_clicked, archive_clicked) = group_response.inner;
 
         // Make the entire card area clickable
         let card_rect = group_response.response.rect;
-        let card_response = ui.interact(card_rect, ui.id().with("project_card"), egui::Sense::click());
+        let card_response = ui.interact(
+            card_rect,
+            ui.id().with("project_card"),
+            egui::Sense::click(),
+        );
 
         // Show hover feedback
         if card_response.hovered() {
@@ -340,13 +349,13 @@ impl ProjectListScreen {
                             event_queue.push(AppEvent::ProjectCreated {
                                 project: created_project,
                             });
-                        }
+                        },
                         Err(e) => {
                             tracing::error!("Failed to create project: {:?}", e);
                             event_queue.push(AppEvent::ProjectError {
                                 message: e.to_string(),
                             });
-                        }
+                        },
                     }
                 });
             }
@@ -374,13 +383,13 @@ impl ProjectListScreen {
                     Ok(projects) => {
                         tracing::info!("Loaded {} projects", projects.len());
                         event_queue.push(AppEvent::ProjectsLoaded { projects });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to load projects: {:?}", e);
                         event_queue.push(AppEvent::ProjectsLoaded {
                             projects: Vec::new(),
                         });
-                    }
+                    },
                 }
             });
         }

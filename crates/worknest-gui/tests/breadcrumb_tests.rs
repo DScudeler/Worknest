@@ -1,8 +1,10 @@
 //! Tests for the breadcrumb navigation component
 
-use wasm_bindgen_test::*;
 use chrono::Utc;
-use worknest_core::models::{Priority, Project, ProjectId, Ticket, TicketId, TicketStatus, TicketType, UserId};
+use wasm_bindgen_test::*;
+use worknest_core::models::{
+    Priority, Project, ProjectId, Ticket, TicketId, TicketStatus, TicketType, UserId,
+};
 use worknest_gui::{
     api_client::ApiClient,
     components::{Breadcrumb, BreadcrumbItem},
@@ -32,7 +34,8 @@ fn create_test_state() -> AppState {
     // Add test ticket (using valid UUID format)
     let ticket = Ticket {
         id: TicketId::from_string("urn:uuid:00000000-0000-0000-0000-000000000100").unwrap(),
-        project_id: ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap(),
+        project_id: ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001")
+            .unwrap(),
         title: "Test Ticket".to_string(),
         description: Some("Test Description".to_string()),
         ticket_type: TicketType::Task,
@@ -102,7 +105,8 @@ fn test_generate_trail_project_list() {
 #[wasm_bindgen_test]
 fn test_generate_trail_project_detail() {
     let state = create_test_state();
-    let project_id = ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
+    let project_id =
+        ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
     let trail = Breadcrumb::generate_trail(&Screen::ProjectDetail(project_id), &state);
 
     assert_eq!(trail.len(), 3);
@@ -115,7 +119,8 @@ fn test_generate_trail_project_detail() {
 #[wasm_bindgen_test]
 fn test_generate_trail_ticket_list_with_project() {
     let state = create_test_state();
-    let project_id = ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
+    let project_id =
+        ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
     let trail = Breadcrumb::generate_trail(
         &Screen::TicketList {
             project_id: Some(project_id),
@@ -145,7 +150,8 @@ fn test_generate_trail_ticket_list_all() {
 #[wasm_bindgen_test]
 fn test_generate_trail_ticket_board() {
     let state = create_test_state();
-    let project_id = ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
+    let project_id =
+        ProjectId::from_string("urn:uuid:00000000-0000-0000-0000-000000000001").unwrap();
     let trail = Breadcrumb::generate_trail(&Screen::TicketBoard { project_id }, &state);
 
     assert_eq!(trail.len(), 4);
@@ -224,7 +230,8 @@ fn test_breadcrumb_update_multiple_screens() {
 #[wasm_bindgen_test]
 fn test_breadcrumb_with_missing_project() {
     let state = create_test_state();
-    let non_existent_id = ProjectId::from_string("urn:uuid:99999999-9999-9999-9999-999999999999").unwrap();
+    let non_existent_id =
+        ProjectId::from_string("urn:uuid:99999999-9999-9999-9999-999999999999").unwrap();
     let trail = Breadcrumb::generate_trail(&Screen::ProjectDetail(non_existent_id), &state);
 
     assert_eq!(trail.len(), 3);
@@ -234,7 +241,8 @@ fn test_breadcrumb_with_missing_project() {
 #[wasm_bindgen_test]
 fn test_breadcrumb_with_missing_ticket() {
     let state = create_test_state();
-    let non_existent_id = TicketId::from_string("urn:uuid:99999999-9999-9999-9999-999999999999").unwrap();
+    let non_existent_id =
+        TicketId::from_string("urn:uuid:99999999-9999-9999-9999-999999999999").unwrap();
     let trail = Breadcrumb::generate_trail(&Screen::TicketDetail(non_existent_id), &state);
 
     assert_eq!(trail.len(), 2);

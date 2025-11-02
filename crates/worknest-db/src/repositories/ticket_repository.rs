@@ -252,14 +252,12 @@ impl TicketRepository {
             .map_err(|e| DbError::Query(e.to_string()))?;
 
         let tickets = if let Some(proj_id) = project_id {
-            stmt
-                .query_map(params![query, proj_id.0.to_string()], row_to_ticket)
+            stmt.query_map(params![query, proj_id.0.to_string()], row_to_ticket)
                 .map_err(|e| DbError::Query(e.to_string()))?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| DbError::Query(e.to_string()))?
         } else {
-            stmt
-                .query_map(params![query], row_to_ticket)
+            stmt.query_map(params![query], row_to_ticket)
                 .map_err(|e| DbError::Query(e.to_string()))?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| DbError::Query(e.to_string()))?

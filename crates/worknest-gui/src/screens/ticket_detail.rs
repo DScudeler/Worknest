@@ -2,7 +2,9 @@
 
 use egui::{RichText, ScrollArea};
 
-use worknest_core::models::{Comment, CommentId, Priority, Ticket, TicketId, TicketStatus, TicketType};
+use worknest_core::models::{
+    Comment, CommentId, Priority, Ticket, TicketId, TicketStatus, TicketType,
+};
 
 use crate::{
     api_client::{CreateCommentRequest, UpdateCommentRequest},
@@ -92,8 +94,7 @@ impl TicketDetailScreen {
                                 {
                                     self.delete_ticket(state, &ticket);
                                 }
-                                },
-                            );
+                            });
                         }
                     });
 
@@ -345,7 +346,7 @@ impl TicketDetailScreen {
                     None => {
                         state.notify_error("Not authenticated".to_string());
                         return;
-                    }
+                    },
                 };
 
                 let ticket_id_uuid = ticket.id.0;
@@ -375,19 +376,22 @@ impl TicketDetailScreen {
                         assigned_to: None,
                     };
 
-                    match api_client.update_ticket(&token, ticket_id_uuid, request).await {
+                    match api_client
+                        .update_ticket(&token, ticket_id_uuid, request)
+                        .await
+                    {
                         Ok(updated_ticket) => {
                             tracing::info!("Ticket updated successfully: {}", updated_ticket.title);
                             event_queue.push(AppEvent::TicketUpdated {
                                 ticket: updated_ticket,
                             });
-                        }
+                        },
                         Err(e) => {
                             tracing::error!("Failed to update ticket: {:?}", e);
                             event_queue.push(AppEvent::TicketError {
                                 message: e.to_string(),
                             });
-                        }
+                        },
                     }
                 });
             }
@@ -399,7 +403,10 @@ impl TicketDetailScreen {
             // Demo mode: Update in-memory state
             if let Some(ticket) = state.tickets.iter_mut().find(|t| t.id == self.ticket_id) {
                 ticket.status = new_status;
-                state.notify_success(format!("Ticket status updated to {:?} (Demo Mode)", new_status));
+                state.notify_success(format!(
+                    "Ticket status updated to {:?} (Demo Mode)",
+                    new_status
+                ));
                 self.load_data(state);
             }
         } else {
@@ -411,7 +418,7 @@ impl TicketDetailScreen {
                 None => {
                     state.notify_error("Not authenticated".to_string());
                     return;
-                }
+                },
             };
 
             let ticket_id_uuid = self.ticket_id.0;
@@ -432,19 +439,22 @@ impl TicketDetailScreen {
                     assigned_to: None,
                 };
 
-                match api_client.update_ticket(&token, ticket_id_uuid, request).await {
+                match api_client
+                    .update_ticket(&token, ticket_id_uuid, request)
+                    .await
+                {
                     Ok(updated_ticket) => {
                         tracing::info!("Ticket status updated to: {:?}", updated_ticket.status);
                         event_queue.push(AppEvent::TicketUpdated {
                             ticket: updated_ticket,
                         });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to update ticket status: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
         }
@@ -467,7 +477,7 @@ impl TicketDetailScreen {
                 None => {
                     state.notify_error("Not authenticated".to_string());
                     return;
-                }
+                },
             };
 
             let ticket_id_uuid = ticket.id.0;
@@ -485,13 +495,13 @@ impl TicketDetailScreen {
                         event_queue.push(AppEvent::TicketDeleted {
                             ticket_id: ticket_id_string,
                         });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to delete ticket: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
 
@@ -527,19 +537,24 @@ impl TicketDetailScreen {
                     Ok(ticket) => {
                         tracing::info!("Loaded ticket: {}", ticket.title);
                         event_queue.push(AppEvent::TicketLoaded { ticket });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to load ticket: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
         }
     }
 
-    fn render_comments_section(&mut self, ui: &mut egui::Ui, state: &mut AppState, ticket: &Ticket) {
+    fn render_comments_section(
+        &mut self,
+        ui: &mut egui::Ui,
+        state: &mut AppState,
+        ticket: &Ticket,
+    ) {
         ui.heading("Comments");
         ui.add_space(Spacing::MEDIUM);
 
@@ -553,7 +568,11 @@ impl TicketDetailScreen {
 
         // Display existing comments
         if comments.is_empty() {
-            ui.label(RichText::new("No comments yet").color(egui::Color32::GRAY).italics());
+            ui.label(
+                RichText::new("No comments yet")
+                    .color(egui::Color32::GRAY)
+                    .italics(),
+            );
         } else {
             for comment in comments.iter() {
                 self.render_comment(ui, state, comment);
@@ -617,11 +636,17 @@ impl TicketDetailScreen {
 
                     ui.label(RichText::new(username).strong().color(Colors::PRIMARY));
                     ui.separator();
-                    ui.label(RichText::new(comment.created_at.format("%Y-%m-%d %H:%M").to_string())
-                        .color(egui::Color32::GRAY));
+                    ui.label(
+                        RichText::new(comment.created_at.format("%Y-%m-%d %H:%M").to_string())
+                            .color(egui::Color32::GRAY),
+                    );
 
                     if comment.created_at != comment.updated_at {
-                        ui.label(RichText::new("(edited)").italics().color(egui::Color32::GRAY));
+                        ui.label(
+                            RichText::new("(edited)")
+                                .italics()
+                                .color(egui::Color32::GRAY),
+                        );
                     }
 
                     // Edit/Delete buttons (only if user owns the comment)
@@ -712,7 +737,7 @@ impl TicketDetailScreen {
                 None => {
                     state.notify_error("Not authenticated".to_string());
                     return;
-                }
+                },
             };
 
             let ticket_id_uuid = ticket.id.0;
@@ -723,17 +748,20 @@ impl TicketDetailScreen {
             wasm_bindgen_futures::spawn_local(async move {
                 use crate::events::AppEvent;
 
-                match api_client.create_comment(&token, ticket_id_uuid, request).await {
+                match api_client
+                    .create_comment(&token, ticket_id_uuid, request)
+                    .await
+                {
                     Ok(comment) => {
                         tracing::info!("Comment created successfully");
                         event_queue.push(AppEvent::CommentCreated { comment });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to create comment: {:?}", e);
                         event_queue.push(AppEvent::CommentError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
 
@@ -768,7 +796,7 @@ impl TicketDetailScreen {
                 None => {
                     state.notify_error("Not authenticated".to_string());
                     return;
-                }
+                },
             };
 
             let comment_id_uuid = comment_id.0;
@@ -779,17 +807,20 @@ impl TicketDetailScreen {
             wasm_bindgen_futures::spawn_local(async move {
                 use crate::events::AppEvent;
 
-                match api_client.update_comment(&token, comment_id_uuid, request).await {
+                match api_client
+                    .update_comment(&token, comment_id_uuid, request)
+                    .await
+                {
                     Ok(comment) => {
                         tracing::info!("Comment updated successfully");
                         event_queue.push(AppEvent::CommentUpdated { comment });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to update comment: {:?}", e);
                         event_queue.push(AppEvent::CommentError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
 
@@ -812,7 +843,7 @@ impl TicketDetailScreen {
                 None => {
                     state.notify_error("Not authenticated".to_string());
                     return;
-                }
+                },
             };
 
             let comment_id_uuid = comment_id.0;
@@ -829,13 +860,13 @@ impl TicketDetailScreen {
                         event_queue.push(AppEvent::CommentDeleted {
                             comment_id: comment_id_string,
                         });
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to delete comment: {:?}", e);
                         event_queue.push(AppEvent::CommentError {
                             message: e.to_string(),
                         });
-                    }
+                    },
                 }
             });
         }

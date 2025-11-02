@@ -48,7 +48,9 @@ pub struct RecordedCall {
 
 impl RecordedCall {
     pub fn has_auth_header(&self) -> bool {
-        self.headers.iter().any(|(name, _)| name.to_lowercase() == "authorization")
+        self.headers
+            .iter()
+            .any(|(name, _)| name.to_lowercase() == "authorization")
     }
 
     pub fn get_auth_token(&self) -> Option<String> {
@@ -111,7 +113,11 @@ impl MockApiClient {
         calls.iter().any(|call| {
             call.method == expected.method
                 && call.path == expected.path
-                && (if expected.requires_auth { call.has_auth_header() } else { true })
+                && (if expected.requires_auth {
+                    call.has_auth_header()
+                } else {
+                    true
+                })
         })
     }
 
@@ -176,9 +182,10 @@ impl ApiCallValidator {
         // Check for unexpected calls (if we have expected calls)
         if !self.expected_calls.is_empty() {
             for recorded in &self.recorded_calls {
-                let expected = self.expected_calls.iter().any(|exp| {
-                    exp.method == recorded.method && exp.path == recorded.path
-                });
+                let expected = self
+                    .expected_calls
+                    .iter()
+                    .any(|exp| exp.method == recorded.method && exp.path == recorded.path);
 
                 if !expected {
                     extra_calls.push(recorded.clone());

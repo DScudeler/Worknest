@@ -14,9 +14,13 @@ wasm_bindgen_test_configure!(run_in_browser);
 #[path = "framework/mod.rs"]
 mod framework;
 
-use framework::api_validation::{ApiCallValidator, ExpectedCall, HttpMethod, MockApiClient, RecordedCall};
+use framework::api_validation::{
+    ApiCallValidator, ExpectedCall, HttpMethod, MockApiClient, RecordedCall,
+};
 use framework::state_transition::{ScreenValidator, StateTransitionValidator};
-use framework::ui_interaction::{InteractionMatrix, SenseCapability, UiTestContext, UserAction, ExpectedState, ExpectedUI};
+use framework::ui_interaction::{
+    ExpectedState, ExpectedUI, InteractionMatrix, SenseCapability, UiTestContext, UserAction,
+};
 
 // =============================================================================
 // Layer 1: UI Interaction Tests
@@ -86,7 +90,10 @@ fn test_project_card_interactions() {
 
     // Verify project card should support both click and hover
     assert!(expected_sense.can_click, "Project card should be clickable");
-    assert!(expected_sense.can_hover, "Project card should support hover");
+    assert!(
+        expected_sense.can_hover,
+        "Project card should support hover"
+    );
 }
 
 /// Test button availability in project detail screen
@@ -174,7 +181,10 @@ fn test_ticket_creation_api_call_from_project_detail() {
         body: None,
     }));
 
-    assert_eq!(mock_client.count_calls(&HttpMethod::POST, "/api/tickets"), 1);
+    assert_eq!(
+        mock_client.count_calls(&HttpMethod::POST, "/api/tickets"),
+        1
+    );
 }
 
 /// Test that project update triggers PATCH API call
@@ -259,17 +269,13 @@ fn test_login_to_dashboard_transition() {
 /// Test project list requires authentication
 #[wasm_bindgen_test]
 fn test_project_list_requires_auth() {
-    let validator = ScreenValidator::for_screen(Screen::ProjectList)
-        .requires_authentication();
+    let validator = ScreenValidator::for_screen(Screen::ProjectList).requires_authentication();
 
     let api_client = ApiClient::new("http://localhost:3000".to_string());
     let state = AppState::new(api_client);
 
     let result = validator.validate(&state);
-    assert!(
-        !result.passed,
-        "Project list should require authentication"
-    );
+    assert!(!result.passed, "Project list should require authentication");
 }
 
 /// Test project detail → ticket list transition
@@ -295,9 +301,11 @@ fn test_project_detail_to_ticket_list() {
 
     // Validate we're on ticket list
     match state.current_screen {
-        Screen::TicketList { project_id: Some(pid) } => {
+        Screen::TicketList {
+            project_id: Some(pid),
+        } => {
             assert_eq!(pid, project_id);
-        }
+        },
         _ => panic!("Expected TicketList screen with project_id"),
     }
 }

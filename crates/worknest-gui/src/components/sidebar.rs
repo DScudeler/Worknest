@@ -2,7 +2,11 @@
 
 use egui::{Context, Key, KeyboardShortcut, Modifiers, RichText, Ui};
 
-use crate::{screens::Screen, state::AppState, theme::{Colors, Spacing}};
+use crate::{
+    screens::Screen,
+    state::AppState,
+    theme::{Colors, Spacing},
+};
 
 /// Sidebar navigation component with collapsible functionality
 pub struct Sidebar {
@@ -46,9 +50,8 @@ impl Sidebar {
     /// Render the sidebar
     pub fn render(&mut self, ctx: &Context, state: &mut AppState) {
         // Check for keyboard shortcut (Ctrl/Cmd + B)
-        if ctx.input_mut(|i| {
-            i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::B))
-        }) {
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::B)))
+        {
             self.toggle();
         }
 
@@ -149,7 +152,11 @@ impl Sidebar {
 
         // Recent Projects Section (if expanded)
         if self.is_expanded {
-            ui.label(RichText::new("RECENT PROJECTS").small().color(egui::Color32::GRAY));
+            ui.label(
+                RichText::new("RECENT PROJECTS")
+                    .small()
+                    .color(egui::Color32::GRAY),
+            );
             ui.add_space(Spacing::SMALL);
 
             // Collect project data to avoid borrowing issues
@@ -161,7 +168,11 @@ impl Sidebar {
                 .collect();
 
             if recent_projects.is_empty() {
-                ui.label(RichText::new("No projects yet").small().color(egui::Color32::GRAY));
+                ui.label(
+                    RichText::new("No projects yet")
+                        .small()
+                        .color(egui::Color32::GRAY),
+                );
             } else {
                 for (project_id, project_name) in recent_projects {
                     let is_active = matches!(&state.current_screen, Screen::ProjectDetail(id) if *id == project_id);
@@ -173,7 +184,7 @@ impl Sidebar {
                             } else {
                                 egui::Color32::TRANSPARENT
                             })
-                            .frame(false)
+                            .frame(false),
                     );
 
                     if response.clicked() {
