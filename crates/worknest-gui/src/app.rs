@@ -8,9 +8,10 @@ use wasm_bindgen::JsCast;
 
 use crate::{
     api_client::ApiClient,
+    components::{Breadcrumb, CommandAction, CommandPalette, Sidebar, ShortcutsHelp, ToastManager},
     screens::{
         DashboardScreen, LoginScreen, ProjectDetailScreen, ProjectListScreen, RegisterScreen,
-        Screen, TicketBoardScreen, TicketDetailScreen, TicketListScreen,
+        Screen, SettingsScreen, TicketBoardScreen, TicketDetailScreen, TicketListScreen,
     },
     state::AppState,
     theme::Theme,
@@ -20,11 +21,17 @@ use crate::{
 pub struct WorknestApp {
     state: AppState,
     theme: Theme,
+    sidebar: Sidebar,
+    shortcuts_help: ShortcutsHelp,
+    command_palette: CommandPalette,
+    toast_manager: ToastManager,
+    breadcrumb: Breadcrumb,
     // Screen instances
     login_screen: LoginScreen,
     register_screen: RegisterScreen,
     dashboard_screen: DashboardScreen,
     project_list_screen: ProjectListScreen,
+    settings_screen: SettingsScreen,
     // Detail screens are created on demand
     project_detail_screen: Option<ProjectDetailScreen>,
     ticket_list_screen: Option<TicketListScreen>,
@@ -39,49 +46,58 @@ impl WorknestApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         tracing::info!("WorknestApp::new() called - initializing application");
 
-        // Parse app mode from URL parameter (?mode=demo or ?mode=integrated)
-        // Default to Integrated mode
-        let app_mode = web_sys::window()
-            .and_then(|w| w.location().search().ok())
-            .and_then(|search| {
-                if search.is_empty() {
-                    None
-                } else {
-                    // Parse URLSearchParams
-                    web_sys::UrlSearchParams::new_with_str(&search)
-                        .ok()
-                        .and_then(|params| params.get("mode"))
-                }
-            })
-            .map(|mode_str| {
-                let mode = crate::app_mode::AppMode::from_str(&mode_str);
-                tracing::info!("App mode from URL: {:?}", mode);
-                mode
-            })
-            .unwrap_or_else(|| {
-                tracing::info!("App mode: Integrated (default)");
-                crate::app_mode::AppMode::Integrated
-            });
-
         // Create API client with default localhost URL
         let api_client = ApiClient::new_default();
         tracing::info!("API client configured for: http://localhost:3000");
 
-        // Create application state with API client and mode
-        let mut state = AppState::new(api_client, app_mode);
+        // Create application state with API client
+        let mut state = AppState::new(api_client);
 
         // Try to restore session from localStorage
         if state.try_restore_session() {
             tracing::info!("Session restored from localStorage");
         }
 
+        // Parse hash from URL to determine initial screen (#/register, #/dashboard, etc.)
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                let location = window.location();
+                if let Ok(hash) = location.hash() {
+                    if !hash.is_empty() {
+                        let screen = match hash.as_str() {
+                            "#/register" => Some(Screen::Register),
+                            "#/dashboard" => Some(Screen::Dashboard),
+                            "#/projects" => Some(Screen::ProjectList),
+                            "#/settings" => Some(Screen::Settings),
+                            "#/login" | "#/" => Some(Screen::Login),
+                            _ => None,
+                        };
+
+                        if let Some(screen) = screen {
+                            tracing::info!("Initial screen from hash '{}': {:?}", hash, screen);
+                            state.current_screen = screen;
+                        } else {
+                            tracing::warn!("Unknown hash route: {}", hash);
+                        }
+                    }
+                }
+            }
+        }
+
         Self {
             state,
             theme: Theme::Dark,
+            sidebar: Sidebar::new(),
+            shortcuts_help: ShortcutsHelp::new(),
+            command_palette: CommandPalette::new(),
+            toast_manager: ToastManager::new(),
+            breadcrumb: Breadcrumb::new(),
             login_screen: LoginScreen::new(),
             register_screen: RegisterScreen::new(),
             dashboard_screen: DashboardScreen::new(),
             project_list_screen: ProjectListScreen::new(),
+            settings_screen: SettingsScreen::new(),
             project_detail_screen: None,
             ticket_list_screen: None,
             ticket_board_screen: None,
@@ -94,22 +110,6 @@ impl WorknestApp {
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Worknest");
-
-                ui.separator();
-
-                // Navigation
-                if ui.button("Dashboard").clicked() {
-                    self.state.navigate_to(Screen::Dashboard);
-                }
-
-                if ui.button("Projects").clicked() {
-                    self.state.navigate_to(Screen::ProjectList);
-                }
-
-                if ui.button("All Tickets").clicked() {
-                    self.state
-                        .navigate_to(Screen::TicketList { project_id: None });
-                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Logout button
@@ -127,36 +127,21 @@ impl WorknestApp {
                     if ui.button(theme_text).clicked() {
                         self.theme = self.theme.toggle();
                     }
-
-                    ui.separator();
-
-                    // User info
-                    if let Some(user) = &self.state.current_user {
-                        ui.label(format!("👤 {}", user.username));
-                    }
                 });
             });
         });
     }
 
     fn render_notifications(&mut self, ctx: &egui::Context) {
-        // Clear old notifications
+        // Update toast manager with current notifications
+        self.toast_manager
+            .update_from_notifications(&self.state.notifications);
+
+        // Render toasts
+        self.toast_manager.render(ctx);
+
+        // Clear old notifications from state
         self.state.clear_old_notifications();
-
-        // Render notifications at the top of the screen
-        if !self.state.notifications.is_empty() {
-            egui::TopBottomPanel::top("notifications").show(ctx, |ui| {
-                for notification in &self.state.notifications {
-                    let color = match notification.level {
-                        crate::state::NotificationLevel::Success => crate::theme::Colors::SUCCESS,
-                        crate::state::NotificationLevel::Error => crate::theme::Colors::ERROR,
-                        crate::state::NotificationLevel::Info => crate::theme::Colors::INFO,
-                    };
-
-                    ui.colored_label(color, &notification.message);
-                }
-            });
-        }
     }
 }
 
@@ -194,9 +179,15 @@ impl eframe::App for WorknestApp {
         // Apply theme
         self.theme.apply(ctx);
 
-        // Show top bar if authenticated
+        // Show sidebar and top bar if authenticated
         if self.state.is_authenticated() {
+            self.sidebar.render(ctx, &mut self.state);
             self.render_top_bar(ctx);
+
+            // Update and render breadcrumb navigation
+            self.breadcrumb
+                .update(&self.state.current_screen, &self.state);
+            self.breadcrumb.render(ctx, &mut self.state);
         }
 
         // Show notifications
@@ -281,12 +272,40 @@ impl eframe::App for WorknestApp {
                 }
             },
             Screen::Settings => {
-                // Settings screen not implemented yet
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("Settings");
-                    ui.label("Settings screen coming soon!");
-                });
+                self.settings_screen.render(ctx, &mut self.state);
             },
+        }
+
+        // Check for keyboard shortcuts and render help modal (always, even on login screen)
+        self.shortcuts_help.check_shortcut(ctx);
+        self.shortcuts_help.render(ctx);
+
+        // Check for command palette shortcut and render (only when authenticated)
+        if self.state.is_authenticated() {
+            self.command_palette.check_shortcut(ctx);
+            if let Some(action) = self.command_palette.render(ctx, &mut self.state) {
+                self.execute_command_action(action);
+            }
+        }
+    }
+}
+
+impl WorknestApp {
+    /// Execute a command action from the command palette
+    fn execute_command_action(&mut self, action: CommandAction) {
+        match action {
+            CommandAction::Navigate(screen) => {
+                self.state.navigate_to(screen);
+            }
+            CommandAction::ToggleSidebar => {
+                self.sidebar.toggle();
+            }
+            CommandAction::ToggleTheme => {
+                self.theme = self.theme.toggle();
+            }
+            CommandAction::ShowHelp => {
+                self.shortcuts_help.open();
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Event system for async API callbacks
 
 use std::sync::{Arc, Mutex};
-use worknest_core::models::{Project, Ticket, User};
+use worknest_core::models::{Comment, Project, Ticket, User};
 
 /// Event queue for handling async API responses
 #[derive(Clone)]
@@ -63,6 +63,13 @@ pub enum AppEvent {
     TicketUpdated { ticket: Ticket },
     TicketDeleted { ticket_id: String },
     TicketError { message: String },
+
+    // Comment events
+    CommentsLoaded { comments: Vec<Comment> },
+    CommentCreated { comment: Comment },
+    CommentUpdated { comment: Comment },
+    CommentDeleted { comment_id: String },
+    CommentError { message: String },
 
     // Generic events
     ApiError { message: String },

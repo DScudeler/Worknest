@@ -44,11 +44,21 @@ impl RegisterScreen {
 
                     // Username field
                     ui.label("Username");
-                    ui.add(
+                    let username_response = ui.add(
                         egui::TextEdit::singleline(&mut self.username)
                             .hint_text("Choose a username")
                             .desired_width(f32::INFINITY),
                     );
+
+                    // Request focus on username field when form is empty (fresh navigation)
+                    // This ensures proper tab order when navigating to the register screen
+                    if self.username.is_empty()
+                        && self.email.is_empty()
+                        && self.password.is_empty()
+                        && !username_response.has_focus()
+                    {
+                        username_response.request_focus();
+                    }
 
                     ui.add_space(Spacing::LARGE);
 
@@ -162,74 +172,45 @@ impl RegisterScreen {
             return;
         }
 
-        // Check if running in demo mode
-        if state.is_demo_mode() {
-            // Demo mode: Create a demo user and auto-login
-            use worknest_core::models::User;
-            use worknest_core::models::UserId;
+        // Call API to register
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
+        let username = self.username.clone();
+        let email = self.email.clone();
+        let password = self.password.clone();
 
-            let demo_user = User {
-                id: UserId::new(),
-                username: self.username.clone(),
-                email: self.email.clone(),
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+        // Clear form and show loading
+        self.username.clear();
+        self.email.clear();
+        self.password.clear();
+        self.confirm_password.clear();
+        state.is_loading = true;
+
+        wasm_bindgen_futures::spawn_local(async move {
+            use crate::api_client::RegisterRequest;
+            use crate::events::AppEvent;
+
+            let request = RegisterRequest {
+                username,
+                email,
+                password,
             };
 
-            // Store in browser storage
-            use gloo_storage::{LocalStorage, Storage};
-            let _ = LocalStorage::set("auth_token", "demo_token");
-            let _ = LocalStorage::set("current_user", &demo_user);
-
-            state.login(demo_user, "demo_token".to_string());
-            state.notify_success("Account created successfully! (Demo Mode)".to_string());
-
-            // Clear form
-            self.username.clear();
-            self.email.clear();
-            self.password.clear();
-            self.confirm_password.clear();
-        } else {
-            // Integrated mode: Call real API
-            let api_client = state.api_client.clone();
-            let event_queue = state.event_queue.clone();
-            let username = self.username.clone();
-            let email = self.email.clone();
-            let password = self.password.clone();
-
-            // Clear form and show loading
-            self.username.clear();
-            self.email.clear();
-            self.password.clear();
-            self.confirm_password.clear();
-            state.is_loading = true;
-
-            wasm_bindgen_futures::spawn_local(async move {
-                use crate::api_client::RegisterRequest;
-                use crate::events::AppEvent;
-
-                let request = RegisterRequest {
-                    username,
-                    email,
-                    password,
-                };
-
-                match api_client.register(request).await {
-                    Ok(response) => {
-                        tracing::info!("Registration successful for user: {}", response.user.username);
-                        event_queue.push(AppEvent::RegisterSuccess {
-                            user: response.user,
-                            token: response.token,
-                        });
-                    }
-                    Err(e) => {
-                        tracing::error!("Registration failed: {:?}", e);
-                        event_queue.push(AppEvent::RegisterError {
-                            message: e.to_string(),
-                        });
-                    }
+            match api_client.register(request).await {
+                Ok(response) => {
+                    tracing::info!("Registration successful for user: {}", response.user.username);
+                    event_queue.push(AppEvent::RegisterSuccess {
+                        user: response.user,
+                        token: response.token,
+                    });
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("Registration failed: {:?}", e);
+                    event_queue.push(AppEvent::RegisterError {
+                        message: e.to_string(),
+                    });
+                }
+            }
+        });
     }
 }

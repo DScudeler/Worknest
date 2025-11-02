@@ -2,9 +2,10 @@
 
 use egui::{RichText, ScrollArea};
 
-use worknest_core::models::{Priority, Ticket, TicketId, TicketStatus, TicketType};
+use worknest_core::models::{Comment, CommentId, Priority, Ticket, TicketId, TicketStatus, TicketType};
 
 use crate::{
+    api_client::{CreateCommentRequest, UpdateCommentRequest},
     screens::Screen,
     state::AppState,
     theme::{Colors, Spacing},
@@ -21,6 +22,10 @@ pub struct TicketDetailScreen {
     edit_status: TicketStatus,
     edit_priority: Priority,
     data_loaded: bool,
+    // Comment fields
+    new_comment_content: String,
+    editing_comment_id: Option<CommentId>,
+    edit_comment_content: String,
 }
 
 impl TicketDetailScreen {
@@ -35,6 +40,9 @@ impl TicketDetailScreen {
             edit_status: TicketStatus::Open,
             edit_priority: Priority::Medium,
             data_loaded: false,
+            new_comment_content: String::new(),
+            editing_comment_id: None,
+            edit_comment_content: String::new(),
         }
     }
 
@@ -45,9 +53,9 @@ impl TicketDetailScreen {
         }
 
         // Sync ticket from state
-        if self.ticket.is_none() || !state.is_demo_mode() {
+        if self.ticket.is_none() || !false {
             self.ticket = state
-                .demo_tickets
+                .tickets
                 .iter()
                 .find(|t| t.id == self.ticket_id)
                 .cloned();
@@ -69,21 +77,21 @@ impl TicketDetailScreen {
                         ui.add_space(Spacing::MEDIUM);
 
                         if !self.is_editing {
-                            ui.heading(RichText::new(&ticket.title).size(24.0));
+                            ui.horizontal(|ui| {
+                                ui.heading(RichText::new(&ticket.title).size(24.0));
 
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui.button("Edit").clicked() {
-                                        self.start_editing(&ticket);
-                                    }
+                                ui.add_space(Spacing::MEDIUM);
 
-                                    if ui
-                                        .add(egui::Button::new("Delete").fill(Colors::ERROR))
-                                        .clicked()
-                                    {
-                                        self.delete_ticket(state, &ticket);
-                                    }
+                                if ui.button("Edit").clicked() {
+                                    self.start_editing(&ticket);
+                                }
+
+                                if ui
+                                    .add(egui::Button::new("Delete").fill(Colors::ERROR))
+                                    .clicked()
+                                {
+                                    self.delete_ticket(state, &ticket);
+                                }
                                 },
                             );
                         }
@@ -213,6 +221,10 @@ impl TicketDetailScreen {
                                 self.update_status(state, TicketStatus::Done);
                             }
                         });
+
+                        // Comments section
+                        ui.add_space(Spacing::XLARGE);
+                        self.render_comments_section(ui, state, &ticket);
                     }
                 } else {
                     ui.label("Ticket not found");
@@ -316,9 +328,9 @@ impl TicketDetailScreen {
             ticket.status = self.edit_status;
             ticket.priority = self.edit_priority;
 
-            if state.is_demo_mode() {
+            if false {
                 // Demo mode: Update in-memory state
-                if let Some(t) = state.demo_tickets.iter_mut().find(|t| t.id == ticket.id) {
+                if let Some(t) = state.tickets.iter_mut().find(|t| t.id == ticket.id) {
                     *t = ticket;
                     state.notify_success("Ticket updated (Demo Mode)".to_string());
                     self.is_editing = false;
@@ -383,9 +395,9 @@ impl TicketDetailScreen {
     }
 
     fn update_status(&mut self, state: &mut AppState, new_status: TicketStatus) {
-        if state.is_demo_mode() {
+        if false {
             // Demo mode: Update in-memory state
-            if let Some(ticket) = state.demo_tickets.iter_mut().find(|t| t.id == self.ticket_id) {
+            if let Some(ticket) = state.tickets.iter_mut().find(|t| t.id == self.ticket_id) {
                 ticket.status = new_status;
                 state.notify_success(format!("Ticket status updated to {:?} (Demo Mode)", new_status));
                 self.load_data(state);
@@ -439,9 +451,9 @@ impl TicketDetailScreen {
     }
 
     fn delete_ticket(&mut self, state: &mut AppState, ticket: &Ticket) {
-        if state.is_demo_mode() {
+        if false {
             // Demo mode: Remove from in-memory state
-            state.demo_tickets.retain(|t| t.id != ticket.id);
+            state.tickets.retain(|t| t.id != ticket.id);
             state.notify_success("Ticket deleted (Demo Mode)".to_string());
             state.navigate_to(Screen::TicketList {
                 project_id: Some(ticket.project_id),
@@ -491,10 +503,10 @@ impl TicketDetailScreen {
     }
 
     fn load_data(&mut self, state: &AppState) {
-        if state.is_demo_mode() {
+        if false {
             // Demo mode: Load from in-memory state
             self.ticket = state
-                .demo_tickets
+                .tickets
                 .iter()
                 .find(|t| t.id == self.ticket_id)
                 .cloned();
@@ -519,6 +531,308 @@ impl TicketDetailScreen {
                     Err(e) => {
                         tracing::error!("Failed to load ticket: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+        }
+    }
+
+    fn render_comments_section(&mut self, ui: &mut egui::Ui, state: &mut AppState, ticket: &Ticket) {
+        ui.heading("Comments");
+        ui.add_space(Spacing::MEDIUM);
+
+        // Get comments for this ticket
+        let comments: Vec<Comment> = state
+            .comments
+            .iter()
+            .filter(|c| c.ticket_id == ticket.id)
+            .cloned()
+            .collect();
+
+        // Display existing comments
+        if comments.is_empty() {
+            ui.label(RichText::new("No comments yet").color(egui::Color32::GRAY).italics());
+        } else {
+            for comment in comments.iter() {
+                self.render_comment(ui, state, comment);
+                ui.add_space(Spacing::MEDIUM);
+            }
+        }
+
+        ui.add_space(Spacing::LARGE);
+
+        // New comment form
+        ui.group(|ui| {
+            ui.set_min_width(f32::INFINITY);
+            ui.vertical(|ui| {
+                ui.label(RichText::new("Add a comment").strong());
+                ui.add_space(Spacing::SMALL);
+
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.new_comment_content)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(3)
+                        .hint_text("Write your comment here..."),
+                );
+
+                ui.add_space(Spacing::SMALL);
+
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(
+                            !self.new_comment_content.trim().is_empty(),
+                            egui::Button::new("Post Comment"),
+                        )
+                        .clicked()
+                    {
+                        self.create_comment(state, ticket);
+                    }
+
+                    if ui.button("Clear").clicked() {
+                        self.new_comment_content.clear();
+                    }
+                });
+            });
+        });
+    }
+
+    fn render_comment(&mut self, ui: &mut egui::Ui, state: &mut AppState, comment: &Comment) {
+        ui.group(|ui| {
+            ui.set_min_width(f32::INFINITY);
+            ui.vertical(|ui| {
+                // Comment header
+                ui.horizontal(|ui| {
+                    // Find username (in demo mode, use user_id as fallback)
+                    let username = if let Some(user) = state.current_user.as_ref() {
+                        if user.id == comment.user_id {
+                            user.username.clone()
+                        } else {
+                            format!("User {}", comment.user_id)
+                        }
+                    } else {
+                        format!("User {}", comment.user_id)
+                    };
+
+                    ui.label(RichText::new(username).strong().color(Colors::PRIMARY));
+                    ui.separator();
+                    ui.label(RichText::new(comment.created_at.format("%Y-%m-%d %H:%M").to_string())
+                        .color(egui::Color32::GRAY));
+
+                    if comment.created_at != comment.updated_at {
+                        ui.label(RichText::new("(edited)").italics().color(egui::Color32::GRAY));
+                    }
+
+                    // Edit/Delete buttons (only if user owns the comment)
+                    if let Some(user) = state.current_user.as_ref() {
+                        if user.id == comment.user_id {
+                            ui.add_space(Spacing::SMALL);
+
+                            if self.editing_comment_id == Some(comment.id) {
+                                if ui.small_button("Cancel").clicked() {
+                                    self.editing_comment_id = None;
+                                    self.edit_comment_content.clear();
+                                }
+                            } else if ui.small_button("Edit").clicked() {
+                                self.editing_comment_id = Some(comment.id);
+                                self.edit_comment_content = comment.content.clone();
+                            }
+
+                            if ui
+                                .add(egui::Button::new("Delete").fill(Colors::ERROR).small())
+                                .clicked()
+                            {
+                                self.delete_comment(state, comment.id);
+                            }
+                        }
+                    }
+                });
+
+                ui.add_space(Spacing::SMALL);
+
+                // Comment content (editable if in edit mode)
+                if self.editing_comment_id == Some(comment.id) {
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.edit_comment_content)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(3),
+                    );
+
+                    ui.add_space(Spacing::SMALL);
+
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add_enabled(
+                                !self.edit_comment_content.trim().is_empty(),
+                                egui::Button::new("Save"),
+                            )
+                            .clicked()
+                        {
+                            self.update_comment(state, comment.id);
+                        }
+                    });
+                } else {
+                    ui.label(&comment.content);
+                }
+            });
+        });
+    }
+
+    fn create_comment(&mut self, state: &mut AppState, ticket: &Ticket) {
+        let content = self.new_comment_content.trim().to_string();
+
+        if content.is_empty() {
+            return;
+        }
+
+        if false {
+            // Demo mode: Create comment in memory
+            if let Some(user) = &state.current_user {
+                let comment = Comment::new(ticket.id, user.id, content);
+
+                // Validate comment
+                if let Err(e) = comment.validate() {
+                    state.notify_error(format!("Invalid comment: {}", e));
+                    return;
+                }
+
+                state.comments.push(comment);
+                state.notify_success("Comment added (Demo Mode)".to_string());
+                self.new_comment_content.clear();
+            } else {
+                state.notify_error("Not authenticated".to_string());
+            }
+        } else {
+            // Integrated mode: Call real API
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => {
+                    state.notify_error("Not authenticated".to_string());
+                    return;
+                }
+            };
+
+            let ticket_id_uuid = ticket.id.0;
+            let request = CreateCommentRequest { content };
+
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.create_comment(&token, ticket_id_uuid, request).await {
+                    Ok(comment) => {
+                        tracing::info!("Comment created successfully");
+                        event_queue.push(AppEvent::CommentCreated { comment });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create comment: {:?}", e);
+                        event_queue.push(AppEvent::CommentError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+
+            self.new_comment_content.clear();
+        }
+    }
+
+    fn update_comment(&mut self, state: &mut AppState, comment_id: CommentId) {
+        let content = self.edit_comment_content.trim().to_string();
+
+        if content.is_empty() {
+            return;
+        }
+
+        if false {
+            // Demo mode: Update comment in memory
+            if let Some(comment) = state.comments.iter_mut().find(|c| c.id == comment_id) {
+                if let Err(e) = comment.update_content(content) {
+                    state.notify_error(format!("Invalid comment: {}", e));
+                    return;
+                }
+                state.notify_success("Comment updated (Demo Mode)".to_string());
+                self.editing_comment_id = None;
+                self.edit_comment_content.clear();
+            }
+        } else {
+            // Integrated mode: Call real API
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => {
+                    state.notify_error("Not authenticated".to_string());
+                    return;
+                }
+            };
+
+            let comment_id_uuid = comment_id.0;
+            let request = UpdateCommentRequest { content };
+
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.update_comment(&token, comment_id_uuid, request).await {
+                    Ok(comment) => {
+                        tracing::info!("Comment updated successfully");
+                        event_queue.push(AppEvent::CommentUpdated { comment });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to update comment: {:?}", e);
+                        event_queue.push(AppEvent::CommentError {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+            });
+
+            self.editing_comment_id = None;
+            self.edit_comment_content.clear();
+        }
+    }
+
+    fn delete_comment(&mut self, state: &mut AppState, comment_id: CommentId) {
+        if false {
+            // Demo mode: Delete from memory
+            state.comments.retain(|c| c.id != comment_id);
+            state.notify_success("Comment deleted (Demo Mode)".to_string());
+        } else {
+            // Integrated mode: Call real API
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let token = match &state.auth_token {
+                Some(t) => t.clone(),
+                None => {
+                    state.notify_error("Not authenticated".to_string());
+                    return;
+                }
+            };
+
+            let comment_id_uuid = comment_id.0;
+            let comment_id_string = comment_id.to_string();
+
+            state.is_loading = true;
+
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+
+                match api_client.delete_comment(&token, comment_id_uuid).await {
+                    Ok(_) => {
+                        tracing::info!("Comment deleted successfully");
+                        event_queue.push(AppEvent::CommentDeleted {
+                            comment_id: comment_id_string,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete comment: {:?}", e);
+                        event_queue.push(AppEvent::CommentError {
                             message: e.to_string(),
                         });
                     }

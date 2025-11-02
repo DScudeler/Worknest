@@ -9,7 +9,7 @@ use crate::error::{CoreError, Result};
 
 /// Unique identifier for comments
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CommentId(Uuid);
+pub struct CommentId(pub Uuid);
 
 impl CommentId {
     pub fn new() -> Self {

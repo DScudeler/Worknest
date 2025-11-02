@@ -153,6 +153,9 @@ async fn main() {
 
     // Protected routes (auth required)
     let protected_routes = Router::new()
+        // Users
+        .route("/api/users", get(list_users))
+        .route("/api/users/me", get(get_current_user))
         // Projects
         .route("/api/projects", get(list_projects).post(create_project))
         .route(
@@ -162,6 +165,7 @@ async fn main() {
         .route("/api/projects/{id}/archive", post(archive_project))
         // Tickets
         .route("/api/tickets", get(list_tickets).post(create_ticket))
+        .route("/api/tickets/search", get(search_tickets))
         .route(
             "/api/tickets/{id}",
             get(get_ticket).put(update_ticket).delete(delete_ticket),
@@ -322,6 +326,28 @@ async fn login(
         user: user.into(),
         token: token.token,
     }))
+}
+
+// ============================================================================
+// User Routes
+// ============================================================================
+
+async fn list_users(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<UserDto>>, AppError> {
+    let users = state.user_repo.find_all().map_err(|e| {
+        tracing::error!("Failed to list users: {:?}", e);
+        AppError::Internal("Failed to retrieve users".to_string())
+    })?;
+
+    Ok(Json(users.into_iter().map(UserDto::from).collect()))
+}
+
+async fn get_current_user(
+    AuthUser(user): AuthUser,
+) -> Result<Json<UserDto>, AppError> {
+    Ok(Json(user.into()))
 }
 
 // ============================================================================
@@ -537,28 +563,92 @@ impl From<Ticket> for TicketDto {
 }
 
 async fn list_tickets(
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<TicketDto>>, AppError> {
-    let tickets = state.ticket_repo.find_all().map_err(|e| {
+    let mut tickets = state.ticket_repo.find_all().map_err(|e| {
         tracing::error!("Failed to list tickets: {:?}", e);
         AppError::Internal("Failed to retrieve tickets".to_string())
     })?;
 
     // Filter by project_id if provided
-    let filtered_tickets = if let Some(project_id_str) = params.get("project_id") {
+    if let Some(project_id_str) = params.get("project_id") {
         let project_id = ProjectId::from_string(project_id_str)
             .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+        tickets.retain(|t| t.project_id == project_id);
+    }
 
-        tickets.into_iter()
-            .filter(|t| t.project_id == project_id)
-            .collect()
-    } else {
-        tickets
-    };
+    // Filter by status if provided
+    if let Some(status_str) = params.get("status") {
+        let status = match status_str.to_lowercase().as_str() {
+            "open" => TicketStatus::Open,
+            "inprogress" => TicketStatus::InProgress,
+            "review" => TicketStatus::Review,
+            "done" => TicketStatus::Done,
+            "closed" => TicketStatus::Closed,
+            _ => return Err(AppError::BadRequest("Invalid status".to_string())),
+        };
+        tickets.retain(|t| t.status == status);
+    }
 
-    Ok(Json(filtered_tickets.into_iter().map(TicketDto::from).collect()))
+    // Filter by priority if provided
+    if let Some(priority_str) = params.get("priority") {
+        let priority = match priority_str.to_lowercase().as_str() {
+            "low" => Priority::Low,
+            "medium" => Priority::Medium,
+            "high" => Priority::High,
+            "critical" => Priority::Critical,
+            _ => return Err(AppError::BadRequest("Invalid priority".to_string())),
+        };
+        tickets.retain(|t| t.priority == priority);
+    }
+
+    // Filter by assignee_id if provided
+    if let Some(assignee_id_str) = params.get("assignee_id") {
+        use worknest_core::models::UserId;
+        if assignee_id_str == "me" {
+            tickets.retain(|t| t.assignee_id == Some(user.id));
+        } else {
+            let assignee_id = UserId::from_string(assignee_id_str)
+                .map_err(|_| AppError::BadRequest("Invalid assignee ID".to_string()))?;
+            tickets.retain(|t| t.assignee_id == Some(assignee_id));
+        }
+    }
+
+    // Sort by field if provided
+    if let Some(sort_by) = params.get("sort") {
+        match sort_by.as_str() {
+            "created_at" => tickets.sort_by(|a, b| b.created_at.cmp(&a.created_at)),
+            "updated_at" => tickets.sort_by(|a, b| b.updated_at.cmp(&a.updated_at)),
+            "priority" => tickets.sort_by(|a, b| {
+                let priority_order = |p: &Priority| match p {
+                    Priority::Critical => 0,
+                    Priority::High => 1,
+                    Priority::Medium => 2,
+                    Priority::Low => 3,
+                };
+                priority_order(&a.priority).cmp(&priority_order(&b.priority))
+            }),
+            _ => {} // Keep default order if invalid sort field
+        }
+    }
+
+    // Apply pagination if provided
+    let limit = params.get("limit")
+        .and_then(|l| l.parse::<usize>().ok())
+        .unwrap_or(usize::MAX);
+
+    let offset = params.get("offset")
+        .and_then(|o| o.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    let paginated_tickets: Vec<Ticket> = tickets.into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    Ok(Json(paginated_tickets.into_iter().map(TicketDto::from).collect()))
 }
 
 async fn get_ticket(
@@ -670,7 +760,7 @@ async fn update_ticket(
     if let Some(status_str) = req.status {
         ticket.status = match status_str.to_lowercase().as_str() {
             "open" => TicketStatus::Open,
-            "inprogress" => TicketStatus::InProgress,
+            "inprogress" | "in progress" => TicketStatus::InProgress,
             "review" => TicketStatus::Review,
             "done" => TicketStatus::Done,
             "closed" => TicketStatus::Closed,
@@ -729,6 +819,30 @@ async fn delete_ticket(
     })?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn search_tickets(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<TicketDto>>, AppError> {
+    let query = params.get("q")
+        .ok_or_else(|| AppError::BadRequest("Missing 'q' query parameter".to_string()))?;
+
+    // Optional project_id filter
+    let project_id = if let Some(project_id_str) = params.get("project_id") {
+        Some(ProjectId::from_string(project_id_str)
+            .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?)
+    } else {
+        None
+    };
+
+    let tickets = state.ticket_repo.search(query, project_id).map_err(|e| {
+        tracing::error!("Failed to search tickets: {:?}", e);
+        AppError::Internal("Failed to search tickets".to_string())
+    })?;
+
+    Ok(Json(tickets.into_iter().map(TicketDto::from).collect()))
 }
 
 // ============================================================================

@@ -49,13 +49,13 @@ impl TicketListScreen {
         // Sync tickets from state
         self.tickets = if let Some(project_id) = self.project_id {
             state
-                .demo_tickets
+                .tickets
                 .iter()
                 .filter(|t| t.project_id == project_id)
                 .cloned()
                 .collect()
         } else {
-            state.demo_tickets.clone()
+            state.tickets.clone()
         };
 
         if self.show_create_dialog {
@@ -76,9 +76,12 @@ impl TicketListScreen {
                 }
 
                 ui.add_space(Spacing::MEDIUM);
-                ui.heading(RichText::new("Tickets").size(28.0));
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading(RichText::new("Tickets").size(28.0));
+
+                    ui.add_space(Spacing::MEDIUM);
+
                     let button_enabled = self.project_id.is_some();
                     let button = ui.add_enabled_ui(button_enabled, |ui| {
                         ui.add_sized(
@@ -185,7 +188,7 @@ impl TicketListScreen {
     }
 
     fn render_ticket_card(&self, ui: &mut egui::Ui, ticket: &Ticket, state: &mut AppState) {
-        ui.group(|ui| {
+        let group_response = ui.group(|ui| {
             ui.set_min_size([f32::INFINITY, 60.0].into());
             ui.horizontal(|ui| {
                 // Priority indicator
@@ -241,13 +244,25 @@ impl TicketListScreen {
                     });
                 });
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("View").clicked() {
-                        state.navigate_to(Screen::TicketDetail(ticket.id));
-                    }
-                });
+                ui.add_space(Spacing::SMALL);
+
+                if ui.button("View").clicked() {
+                    state.navigate_to(Screen::TicketDetail(ticket.id));
+                }
             });
         });
+
+        // Make the entire card area clickable
+        let card_rect = group_response.response.rect;
+        let card_response = ui.interact(card_rect, ui.id().with("ticket_card"), egui::Sense::click());
+
+        if card_response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+
+        if card_response.clicked() {
+            state.navigate_to(Screen::TicketDetail(ticket.id));
+        }
     }
 
     fn render_create_dialog(&mut self, ctx: &egui::Context, state: &mut AppState) {
@@ -342,9 +357,9 @@ impl TicketListScreen {
 
             ticket.priority = self.new_ticket_priority;
 
-            if state.is_demo_mode() {
+            if false {
                 // Demo mode: Add to in-memory state
-                state.demo_tickets.push(ticket);
+                state.tickets.push(ticket);
                 state.notify_success("Ticket created successfully (Demo Mode)".to_string());
                 self.show_create_dialog = false;
                 self.clear_create_form();
@@ -415,17 +430,17 @@ impl TicketListScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
-        if state.is_demo_mode() {
+        if false {
             // Demo mode: Load from in-memory state
             self.tickets = if let Some(project_id) = self.project_id {
                 state
-                    .demo_tickets
+                    .tickets
                     .iter()
                     .filter(|t| t.project_id == project_id)
                     .cloned()
                     .collect()
             } else {
-                state.demo_tickets.clone()
+                state.tickets.clone()
             };
         } else {
             // Integrated mode: Load from API

@@ -112,68 +112,41 @@ impl LoginScreen {
             return;
         }
 
-        // Check if running in demo mode
-        if state.is_demo_mode() {
-            // Demo mode: Create a demo user for local development
-            use worknest_core::models::User;
-            use worknest_core::models::UserId;
+        // Call API to login
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
+        let username = self.username.clone();
+        let password = self.password.clone();
 
-            let demo_user = User {
-                id: UserId::new(),
-                username: self.username.clone(),
-                email: format!("{}@example.com", self.username),
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+        // Clear form and show loading
+        self.username.clear();
+        self.password.clear();
+        state.is_loading = true;
+
+        wasm_bindgen_futures::spawn_local(async move {
+            use crate::api_client::LoginRequest;
+            use crate::events::AppEvent;
+
+            let request = LoginRequest {
+                username,
+                password,
             };
 
-            // Store in browser storage
-            use gloo_storage::{LocalStorage, Storage};
-            let _ = LocalStorage::set("auth_token", "demo_token");
-            let _ = LocalStorage::set("current_user", &demo_user);
-
-            state.login(demo_user, "demo_token".to_string());
-            state.notify_success("Login successful! (Demo Mode)".to_string());
-
-            // Clear form
-            self.username.clear();
-            self.password.clear();
-        } else {
-            // Integrated mode: Call real API
-            let api_client = state.api_client.clone();
-            let event_queue = state.event_queue.clone();
-            let username = self.username.clone();
-            let password = self.password.clone();
-
-            // Clear form and show loading
-            self.username.clear();
-            self.password.clear();
-            state.is_loading = true;
-
-            wasm_bindgen_futures::spawn_local(async move {
-                use crate::api_client::LoginRequest;
-                use crate::events::AppEvent;
-
-                let request = LoginRequest {
-                    username,
-                    password,
-                };
-
-                match api_client.login(request).await {
-                    Ok(response) => {
-                        tracing::info!("Login successful for user: {}", response.user.username);
-                        event_queue.push(AppEvent::LoginSuccess {
-                            user: response.user,
-                            token: response.token,
-                        });
-                    }
-                    Err(e) => {
-                        tracing::error!("Login failed: {:?}", e);
-                        event_queue.push(AppEvent::LoginError {
-                            message: e.to_string(),
-                        });
-                    }
+            match api_client.login(request).await {
+                Ok(response) => {
+                    tracing::info!("Login successful for user: {}", response.user.username);
+                    event_queue.push(AppEvent::LoginSuccess {
+                        user: response.user,
+                        token: response.token,
+                    });
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("Login failed: {:?}", e);
+                    event_queue.push(AppEvent::LoginError {
+                        message: e.to_string(),
+                    });
+                }
+            }
+        });
     }
 }

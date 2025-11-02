@@ -12,16 +12,27 @@ Worknest is a modern, high-performance project management tool built entirely in
 
 The demo runs entirely in your browser with no backend required! All data is stored locally in your browser's localStorage.
 
-## Features (Planned)
+## Features
 
-### MVP (v1.0)
-- User authentication and session management
-- Project management (create, organize, archive)
-- Comprehensive ticket system (tasks, bugs, features)
-- Multiple views: List, Kanban board
-- Priority and status tracking
-- Responsive web UI powered by egui
-- Works on desktop and mobile browsers
+### Core Platform (v1.0) ✅
+- ✅ User authentication and session management
+- ✅ Project management (create, organize, archive)
+- ✅ Comprehensive ticket system (tasks, bugs, features, epics)
+- ✅ Multiple views: List, Kanban board
+- ✅ Priority and status tracking
+- ✅ Responsive web UI powered by egui
+- ✅ REST API with JWT authentication
+- ✅ Full-text search with SQLite FTS
+- ✅ Comments and attachments
+
+### VSCode Integration (NEW!) 🎉
+- 🆕 **VSCode Extension**: Seamless IDE integration
+- 🆕 **Ticket Tree View**: Browse projects and tickets in sidebar
+- 🆕 **Git Integration**: Smart commit messages and branch creation
+- 🆕 **Status Bar**: Current ticket indicator
+- 🆕 **Command Palette**: Quick ticket operations
+- 🆕 **Search**: Full-text search across all tickets
+- See [worknest-vscode/](worknest-vscode/) and [QUICKSTART.md](QUICKSTART.md)
 
 ### Future Releases
 - **v2.0**: Advanced features (custom fields, workflows, reporting)
@@ -49,9 +60,16 @@ worknest/
 │   ├── worknest-core/       # Core business logic
 │   ├── worknest-db/         # Database layer (SQLite)
 │   ├── worknest-auth/       # Authentication
-│   ├── worknest-api/        # Backend API server
+│   ├── worknest-api/        # Backend API server (REST)
 │   ├── worknest-gui/        # Web UI (egui/WASM)
 │   └── worknest-plugins/    # Plugin system (future)
+├── worknest-vscode/         # VSCode extension (NEW!)
+│   ├── src/
+│   │   ├── api/            # TypeScript API client
+│   │   ├── views/          # Tree view & status bar
+│   │   ├── commands/       # Ticket & git commands
+│   │   └── utils/          # Config & storage
+│   └── package.json        # Extension manifest
 ```
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
@@ -121,6 +139,35 @@ make fmt               # Format code
 make clippy            # Run linter
 make clean             # Clean build artifacts
 ```
+
+### VSCode Extension Setup
+
+Quick start with the VSCode extension:
+
+```bash
+# Terminal 1: Start the API server
+cargo run --package worknest-api
+
+# Terminal 2: Build and launch extension
+cd worknest-vscode
+npm install
+npm run compile
+
+# Press F5 in VSCode to launch extension in debug mode
+```
+
+For detailed setup instructions, see:
+- [QUICKSTART.md](QUICKSTART.md) - 5-minute quick start guide
+- [worknest-vscode/README.md](worknest-vscode/README.md) - Full extension documentation
+- [worknest-vscode/INSTALLATION.md](worknest-vscode/INSTALLATION.md) - Detailed installation guide
+
+**Key Features:**
+- Browse and manage tickets from VSCode sidebar
+- Create tickets with `Ctrl+Alt+W T`
+- Search tickets with `Ctrl+Alt+W S`
+- Auto-populate commit messages from ticket info
+- Create branches from tickets
+- View current ticket in status bar
 
 ## Deploying to GitHub Pages
 

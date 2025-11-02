@@ -70,7 +70,7 @@ fn test_notifications() {
 /// Test authentication state
 #[wasm_bindgen_test]
 fn test_authentication() {
-    use worknest_core::models::{User, UserId};
+    use worknest_core::models::User;
 
     let api_client = ApiClient::new("http://localhost:3000".to_string());
     let mut state = AppState::new(api_client);
@@ -117,6 +117,6 @@ fn test_demo_projects() {
     let state = AppState::new(api_client);
 
     // Initially empty (demo data added by screens)
-    assert_eq!(state.demo_projects.len(), 0);
-    assert_eq!(state.demo_tickets.len(), 0);
+    assert_eq!(state.projects.len(), 0);
+    assert_eq!(state.tickets.len(), 0);
 }

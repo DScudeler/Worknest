@@ -1,0 +1,174 @@
+{
+  "name": "worknest",
+  "displayName": "Worknest",
+  "description": "Worknest ticket management integration for VSCode",
+  "version": "0.1.0",
+  "publisher": "worknest",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Worknest",
+      "properties": {
+        "worknest.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Worknest API server URL"
+        },
+        "worknest.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh tickets periodically"
+        },
+        "worknest.refreshInterval": {
+          "type": "number",
+          "default": 60,
+          "description": "Auto-refresh interval in seconds"
+        },
+        "worknest.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show ticket information in status bar"
+        },
+        "worknest.defaultProject": {
+          "type": "string",
+          "default": "",
+          "description": "Default project ID for new tickets"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "worknest.login",
+        "title": "Worknest: Login"
+      },
+      {
+        "command": "worknest.logout",
+        "title": "Worknest: Logout"
+      },
+      {
+        "command": "worknest.createTicket",
+        "title": "Worknest: Create Ticket"
+      },
+      {
+        "command": "worknest.searchTickets",
+        "title": "Worknest: Search Tickets"
+      },
+      {
+        "command": "worknest.refresh",
+        "title": "Worknest: Refresh Tickets"
+      },
+      {
+        "command": "worknest.assignToMe",
+        "title": "Worknest: Assign Ticket to Me"
+      },
+      {
+        "command": "worknest.changeStatus",
+        "title": "Worknest: Change Ticket Status"
+      },
+      {
+        "command": "worknest.createBranchFromTicket",
+        "title": "Worknest: Create Branch from Ticket"
+      },
+      {
+        "command": "worknest.insertTicketReference",
+        "title": "Worknest: Insert Ticket Reference"
+      },
+      {
+        "command": "worknest.openTicket",
+        "title": "Worknest: Open Ticket Details"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "worknest",
+          "title": "Worknest",
+          "icon": "media/worknest-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "worknest": [
+        {
+          "id": "worknestTickets",
+          "name": "Tickets"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "worknest.openTicket",
+          "when": "view == worknestTickets && viewItem == ticket",
+          "group": "inline"
+        },
+        {
+          "command": "worknest.assignToMe",
+          "when": "view == worknestTickets && viewItem == ticket"
+        },
+        {
+          "command": "worknest.changeStatus",
+          "when": "view == worknestTickets && viewItem == ticket"
+        },
+        {
+          "command": "worknest.createBranchFromTicket",
+          "when": "view == worknestTickets && viewItem == ticket"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "worknest.login",
+          "when": "!worknest.authenticated"
+        },
+        {
+          "command": "worknest.logout",
+          "when": "worknest.authenticated"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "worknest.createTicket",
+        "key": "ctrl+alt+w t",
+        "mac": "cmd+alt+w t"
+      },
+      {
+        "command": "worknest.searchTickets",
+        "key": "ctrl+alt+w s",
+        "mac": "cmd+alt+w s"
+      },
+      {
+        "command": "worknest.refresh",
+        "key": "ctrl+alt+w r",
+        "mac": "cmd+alt+w r"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^8.x",
+    "@typescript-eslint/parser": "^8.x",
+    "eslint": "^9.x",
+    "typescript": "^5.x"
+  },
+  "dependencies": {
+    "@vscode/vsce": "^3.6.2",
+    "axios": "^1.6.0"
+  }
+}

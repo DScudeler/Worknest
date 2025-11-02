@@ -1,10 +1,9 @@
 //! Application state management
 
 use crate::api_client::ApiClient;
-use crate::app_mode::AppMode;
 use crate::events::{AppEvent, EventQueue};
 use crate::screens::Screen;
-use worknest_core::models::{Project, Ticket, User};
+use worknest_core::models::{Comment, Project, Ticket, User};
 
 // Use web_time::Instant for WASM compatibility instead of std::time::Instant
 use web_time::Instant;
@@ -12,8 +11,6 @@ use web_time::Instant;
 /// Main application state
 #[derive(Clone)]
 pub struct AppState {
-    /// Application operating mode (demo or integrated)
-    pub app_mode: AppMode,
     /// Current authenticated user
     pub current_user: Option<User>,
     /// Authentication token
@@ -28,17 +25,18 @@ pub struct AppState {
     pub notifications: Vec<Notification>,
     /// Loading state
     pub is_loading: bool,
-    /// Demo projects (for local development without backend)
-    pub demo_projects: Vec<Project>,
-    /// Demo tickets (for local development without backend)
-    pub demo_tickets: Vec<Ticket>,
+    /// Cached projects from API
+    pub projects: Vec<Project>,
+    /// Cached tickets from API
+    pub tickets: Vec<Ticket>,
+    /// Cached comments from API
+    pub comments: Vec<Comment>,
 }
 
 impl AppState {
-    /// Create a new web application state with API client and mode
-    pub fn new(api_client: ApiClient, app_mode: AppMode) -> Self {
+    /// Create a new web application state with API client
+    pub fn new(api_client: ApiClient) -> Self {
         Self {
-            app_mode,
             current_user: None,
             auth_token: None,
             current_screen: Screen::Login,
@@ -46,8 +44,9 @@ impl AppState {
             event_queue: EventQueue::new(),
             notifications: Vec::new(),
             is_loading: false,
-            demo_projects: Vec::new(),
-            demo_tickets: Vec::new(),
+            projects: Vec::new(),
+            tickets: Vec::new(),
+            comments: Vec::new(),
         }
     }
 
@@ -72,15 +71,15 @@ impl AppState {
                     self.notify_error(format!("Registration failed: {}", message));
                 }
                 AppEvent::ProjectsLoaded { projects } => {
-                    self.demo_projects = projects;
+                    self.projects = projects;
                     self.is_loading = false;
                 }
                 AppEvent::ProjectCreated { project } => {
-                    self.demo_projects.push(project);
+                    self.projects.push(project);
                     self.notify_success("Project created successfully!".to_string());
                 }
                 AppEvent::ProjectUpdated { project } => {
-                    if let Some(p) = self.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                    if let Some(p) = self.projects.iter_mut().find(|p| p.id == project.id) {
                         *p = project;
                     }
                     self.notify_success("Project updated successfully!".to_string());
@@ -88,7 +87,7 @@ impl AppState {
                 AppEvent::ProjectDeleted { project_id } => {
                     use worknest_core::models::ProjectId;
                     if let Ok(id) = ProjectId::from_string(&project_id) {
-                        self.demo_projects.retain(|p| p.id != id);
+                        self.projects.retain(|p| p.id != id);
                         self.notify_success("Project deleted successfully!".to_string());
                     }
                 }
@@ -96,15 +95,15 @@ impl AppState {
                     self.notify_error(format!("Project error: {}", message));
                 }
                 AppEvent::TicketsLoaded { tickets } => {
-                    self.demo_tickets = tickets;
+                    self.tickets = tickets;
                     self.is_loading = false;
                 }
                 AppEvent::TicketCreated { ticket } => {
-                    self.demo_tickets.push(ticket);
+                    self.tickets.push(ticket);
                     self.notify_success("Ticket created successfully!".to_string());
                 }
                 AppEvent::TicketUpdated { ticket } => {
-                    if let Some(t) = self.demo_tickets.iter_mut().find(|t| t.id == ticket.id) {
+                    if let Some(t) = self.tickets.iter_mut().find(|t| t.id == ticket.id) {
                         *t = ticket;
                     }
                     self.notify_success("Ticket updated successfully!".to_string());
@@ -112,12 +111,36 @@ impl AppState {
                 AppEvent::TicketDeleted { ticket_id } => {
                     use worknest_core::models::TicketId;
                     if let Ok(id) = TicketId::from_string(&ticket_id) {
-                        self.demo_tickets.retain(|t| t.id != id);
+                        self.tickets.retain(|t| t.id != id);
                         self.notify_success("Ticket deleted successfully!".to_string());
                     }
                 }
                 AppEvent::TicketError { message } => {
                     self.notify_error(format!("Ticket error: {}", message));
+                }
+                AppEvent::CommentsLoaded { comments } => {
+                    self.comments = comments;
+                    self.is_loading = false;
+                }
+                AppEvent::CommentCreated { comment } => {
+                    self.comments.push(comment);
+                    self.notify_success("Comment added successfully!".to_string());
+                }
+                AppEvent::CommentUpdated { comment } => {
+                    if let Some(c) = self.comments.iter_mut().find(|c| c.id == comment.id) {
+                        *c = comment;
+                    }
+                    self.notify_success("Comment updated successfully!".to_string());
+                }
+                AppEvent::CommentDeleted { comment_id } => {
+                    use worknest_core::models::CommentId;
+                    if let Ok(id) = CommentId::from_string(&comment_id) {
+                        self.comments.retain(|c| c.id != id);
+                    }
+                    self.notify_success("Comment deleted successfully!".to_string());
+                }
+                AppEvent::CommentError { message } => {
+                    self.notify_error(format!("Comment error: {}", message));
                 }
                 AppEvent::ApiError { message } => {
                     self.notify_error(format!("API error: {}", message));
@@ -128,23 +151,18 @@ impl AppState {
                 }
                 AppEvent::ProjectLoaded { project } => {
                     // Update single project in list if it exists
-                    if let Some(p) = self.demo_projects.iter_mut().find(|p| p.id == project.id) {
+                    if let Some(p) = self.projects.iter_mut().find(|p| p.id == project.id) {
                         *p = project;
                     }
                 }
                 AppEvent::TicketLoaded { ticket } => {
                     // Update single ticket in list if it exists
-                    if let Some(t) = self.demo_tickets.iter_mut().find(|t| t.id == ticket.id) {
+                    if let Some(t) = self.tickets.iter_mut().find(|t| t.id == ticket.id) {
                         *t = ticket;
                     }
                 }
             }
         }
-    }
-
-    /// Check if running in demo mode
-    pub fn is_demo_mode(&self) -> bool {
-        self.app_mode.is_demo()
     }
 
     /// Navigate to a screen

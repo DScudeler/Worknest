@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use worknest_core::models::{Project, Ticket, User};
+use worknest_core::models::{Comment, Project, Ticket, User};
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -306,6 +306,79 @@ impl ApiClient {
             Err(anyhow!("Failed to delete ticket: {}", response.status()))
         }
     }
+
+    // Comment endpoints
+    pub async fn get_ticket_comments(&self, token: &str, ticket_id: Uuid) -> Result<Vec<Comment>> {
+        let response = self
+            .client
+            .get(self.api_url(&format!("/tickets/{}/comments", ticket_id)))
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to get comments: {}", response.status()))
+        }
+    }
+
+    pub async fn create_comment(
+        &self,
+        token: &str,
+        ticket_id: Uuid,
+        request: CreateCommentRequest,
+    ) -> Result<Comment> {
+        let response = self
+            .client
+            .post(self.api_url(&format!("/tickets/{}/comments", ticket_id)))
+            .bearer_auth(token)
+            .json(&request)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to create comment: {}", response.status()))
+        }
+    }
+
+    pub async fn update_comment(
+        &self,
+        token: &str,
+        comment_id: Uuid,
+        request: UpdateCommentRequest,
+    ) -> Result<Comment> {
+        let response = self
+            .client
+            .put(self.api_url(&format!("/comments/{}", comment_id)))
+            .bearer_auth(token)
+            .json(&request)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow!("Failed to update comment: {}", response.status()))
+        }
+    }
+
+    pub async fn delete_comment(&self, token: &str, comment_id: Uuid) -> Result<()> {
+        let response = self
+            .client
+            .delete(self.api_url(&format!("/comments/{}", comment_id)))
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to delete comment: {}", response.status()))
+        }
+    }
 }
 
 // Request/Response types
@@ -359,4 +432,14 @@ pub struct UpdateTicketRequest {
     pub priority: Option<String>,
     pub ticket_type: Option<String>,
     pub assigned_to: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCommentRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCommentRequest {
+    pub content: String,
 }

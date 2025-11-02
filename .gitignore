@@ -30,3 +30,17 @@ logs/
 # Build artifacts
 dist/
 build/
+
+# VSCode Extension
+worknest-vscode/node_modules/
+worknest-vscode/out/
+worknest-vscode/*.vsix
+worknest-vscode/.vscode-test/
+
+# Node/NPM
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# AI
+.claude/

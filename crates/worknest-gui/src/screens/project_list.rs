@@ -50,7 +50,7 @@ impl ProjectListScreen {
         }
 
         // Sync projects from state (updated by event queue)
-        self.projects = state.demo_projects.clone();
+        self.projects = state.projects.clone();
 
         // Show create dialog if open
         if self.show_create_dialog {
@@ -200,10 +200,9 @@ impl ProjectListScreen {
         // Extract the button click states
         let (view_clicked, tickets_clicked, board_clicked, archive_clicked) = group_response.inner;
 
-        // Make the entire card interactive with BOTH click and hover detection
-        let card_response = group_response.response.interact(
-            egui::Sense::click().union(egui::Sense::hover())
-        );
+        // Make the entire card area clickable
+        let card_rect = group_response.response.rect;
+        let card_response = ui.interact(card_rect, ui.id().with("project_card"), egui::Sense::click());
 
         // Show hover feedback
         if card_response.hovered() {
@@ -222,8 +221,8 @@ impl ProjectListScreen {
                 project_id: project.id,
             });
         } else if archive_clicked {
-            // Demo mode: Update in-memory state
-            if let Some(p) = state.demo_projects.iter_mut().find(|p| p.id == project.id) {
+            // Update project archived status via API
+            if let Some(p) = state.projects.iter_mut().find(|p| p.id == project.id) {
                 p.archived = !p.archived;
                 let msg = if p.archived {
                     "Project archived"
@@ -231,6 +230,7 @@ impl ProjectListScreen {
                     "Project unarchived"
                 };
                 state.notify_success(msg.to_string());
+                // TODO: Call API to update project archived status
                 self.load_projects(state);
             }
         } else if card_response.clicked() {
@@ -313,51 +313,42 @@ impl ProjectListScreen {
                 project.color = Some(self.new_project_color.clone());
             }
 
-            if state.is_demo_mode() {
-                // Demo mode: Add to in-memory state
-                state.demo_projects.push(project);
-                state.notify_success("Project created successfully (Demo Mode)".to_string());
+            // Call API to create project
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+
+            if let Some(token) = &state.auth_token {
+                let token = token.clone();
+
+                // Close dialog and clear form immediately
                 self.show_create_dialog = false;
                 self.clear_create_form();
-                self.load_projects(state);
-            } else {
-                // Integrated mode: Call API
-                let api_client = state.api_client.clone();
-                let event_queue = state.event_queue.clone();
+                state.is_loading = true;
 
-                if let Some(token) = &state.auth_token {
-                    let token = token.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::api_client::CreateProjectRequest;
+                    use crate::events::AppEvent;
 
-                    // Close dialog and clear form immediately
-                    self.show_create_dialog = false;
-                    self.clear_create_form();
-                    state.is_loading = true;
+                    let request = CreateProjectRequest {
+                        name: project.name,
+                        description: project.description,
+                    };
 
-                    wasm_bindgen_futures::spawn_local(async move {
-                        use crate::api_client::CreateProjectRequest;
-                        use crate::events::AppEvent;
-
-                        let request = CreateProjectRequest {
-                            name: project.name,
-                            description: project.description,
-                        };
-
-                        match api_client.create_project(&token, request).await {
-                            Ok(created_project) => {
-                                tracing::info!("Project created: {}", created_project.name);
-                                event_queue.push(AppEvent::ProjectCreated {
-                                    project: created_project,
-                                });
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to create project: {:?}", e);
-                                event_queue.push(AppEvent::ProjectError {
-                                    message: e.to_string(),
-                                });
-                            }
+                    match api_client.create_project(&token, request).await {
+                        Ok(created_project) => {
+                            tracing::info!("Project created: {}", created_project.name);
+                            event_queue.push(AppEvent::ProjectCreated {
+                                project: created_project,
+                            });
                         }
-                    });
-                }
+                        Err(e) => {
+                            tracing::error!("Failed to create project: {:?}", e);
+                            event_queue.push(AppEvent::ProjectError {
+                                message: e.to_string(),
+                            });
+                        }
+                    }
+                });
             }
         }
     }
@@ -369,34 +360,29 @@ impl ProjectListScreen {
     }
 
     fn load_projects(&mut self, state: &AppState) {
-        if state.is_demo_mode() {
-            // Demo mode: Load from in-memory state
-            self.projects = state.demo_projects.clone();
-        } else {
-            // Integrated mode: Load from API
-            let api_client = state.api_client.clone();
-            let event_queue = state.event_queue.clone();
+        // Load from API
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
 
-            if let Some(token) = &state.auth_token {
-                let token = token.clone();
+        if let Some(token) = &state.auth_token {
+            let token = token.clone();
 
-                wasm_bindgen_futures::spawn_local(async move {
-                    use crate::events::AppEvent;
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
 
-                    match api_client.get_projects(&token).await {
-                        Ok(projects) => {
-                            tracing::info!("Loaded {} projects", projects.len());
-                            event_queue.push(AppEvent::ProjectsLoaded { projects });
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to load projects: {:?}", e);
-                            event_queue.push(AppEvent::ProjectsLoaded {
-                                projects: Vec::new(),
-                            });
-                        }
+                match api_client.get_projects(&token).await {
+                    Ok(projects) => {
+                        tracing::info!("Loaded {} projects", projects.len());
+                        event_queue.push(AppEvent::ProjectsLoaded { projects });
                     }
-                });
-            }
+                    Err(e) => {
+                        tracing::error!("Failed to load projects: {:?}", e);
+                        event_queue.push(AppEvent::ProjectsLoaded {
+                            projects: Vec::new(),
+                        });
+                    }
+                }
+            });
         }
     }
 }

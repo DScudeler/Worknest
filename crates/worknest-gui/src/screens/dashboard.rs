@@ -30,7 +30,7 @@ impl DashboardScreen {
         }
 
         // Sync projects from state (updated by event queue)
-        self.recent_projects = state.demo_projects.clone();
+        self.recent_projects = state.projects.clone();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
@@ -71,54 +71,62 @@ impl DashboardScreen {
                 ui.add_space(Spacing::XLARGE);
 
                 // Stats cards
-                ui.columns(3, |columns| {
-                    // Total projects
-                    columns[0].group(|ui| {
-                        ui.set_min_size([200.0, 100.0].into());
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(Spacing::LARGE);
-                            ui.label(
-                                RichText::new(format!("{}", self.recent_projects.len()))
-                                    .size(36.0)
-                                    .strong()
-                                    .color(Colors::PRIMARY),
-                            );
-                            ui.label("Total Projects");
-                            ui.add_space(Spacing::LARGE);
+                let active_count = self.recent_projects.iter().filter(|p| !p.archived).count();
+                let archived_count = self.recent_projects.len() - active_count;
+
+                ui.horizontal(|ui| {
+                    ui.scope(|ui| {
+                        ui.group(|ui| {
+                            ui.set_min_size([200.0, 100.0].into());
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(Spacing::LARGE);
+                                ui.label(
+                                    RichText::new(format!("{}", self.recent_projects.len()))
+                                        .size(36.0)
+                                        .strong()
+                                        .color(Colors::PRIMARY),
+                                );
+                                ui.label("Total Projects");
+                                ui.add_space(Spacing::LARGE);
+                            });
                         });
                     });
 
-                    // Active projects
-                    let active_count = self.recent_projects.iter().filter(|p| !p.archived).count();
-                    columns[1].group(|ui| {
-                        ui.set_min_size([200.0, 100.0].into());
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(Spacing::LARGE);
-                            ui.label(
-                                RichText::new(format!("{}", active_count))
-                                    .size(36.0)
-                                    .strong()
-                                    .color(Colors::SUCCESS),
-                            );
-                            ui.label("Active Projects");
-                            ui.add_space(Spacing::LARGE);
+                    ui.add_space(Spacing::LARGE);
+
+                    ui.scope(|ui| {
+                        ui.group(|ui| {
+                            ui.set_min_size([200.0, 100.0].into());
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(Spacing::LARGE);
+                                ui.label(
+                                    RichText::new(format!("{}", active_count))
+                                        .size(36.0)
+                                        .strong()
+                                        .color(Colors::SUCCESS),
+                                );
+                                ui.label("Active Projects");
+                                ui.add_space(Spacing::LARGE);
+                            });
                         });
                     });
 
-                    // Archived projects
-                    let archived_count = self.recent_projects.len() - active_count;
-                    columns[2].group(|ui| {
-                        ui.set_min_size([200.0, 100.0].into());
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(Spacing::LARGE);
-                            ui.label(
-                                RichText::new(format!("{}", archived_count))
-                                    .size(36.0)
-                                    .strong()
-                                    .color(egui::Color32::GRAY),
-                            );
-                            ui.label("Archived Projects");
-                            ui.add_space(Spacing::LARGE);
+                    ui.add_space(Spacing::LARGE);
+
+                    ui.scope(|ui| {
+                        ui.group(|ui| {
+                            ui.set_min_size([200.0, 100.0].into());
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(Spacing::LARGE);
+                                ui.label(
+                                    RichText::new(format!("{}", archived_count))
+                                        .size(36.0)
+                                        .strong()
+                                        .color(egui::Color32::GRAY),
+                                );
+                                ui.label("Archived Projects");
+                                ui.add_space(Spacing::LARGE);
+                            });
                         });
                     });
                 });
@@ -159,22 +167,21 @@ impl DashboardScreen {
                                     }
                                 });
 
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button("View").clicked() {
-                                            view_clicked = true;
-                                        }
+                                ui.add_space(Spacing::MEDIUM);
 
-                                        if project.archived {
-                                            ui.label(
-                                                RichText::new("Archived")
-                                                    .small()
-                                                    .color(egui::Color32::GRAY),
-                                            );
-                                        }
-                                    },
-                                );
+                                if project.archived {
+                                    ui.label(
+                                        RichText::new("Archived")
+                                            .small()
+                                            .color(egui::Color32::GRAY),
+                                    );
+                                }
+
+                                ui.add_space(Spacing::SMALL);
+
+                                if ui.button("View").clicked() {
+                                    view_clicked = true;
+                                }
                             });
 
                             view_clicked
@@ -183,10 +190,9 @@ impl DashboardScreen {
                         // Extract the button click state
                         let view_clicked = group_response.inner;
 
-                        // Make the entire card interactive with BOTH click and hover detection
-                        let card_response = group_response.response.interact(
-                            egui::Sense::click().union(egui::Sense::hover())
-                        );
+                        // Make the entire card area clickable
+                        let card_rect = group_response.response.rect;
+                        let card_response = ui.interact(card_rect, ui.id().with("dashboard_project_card"), egui::Sense::click());
 
                         // Apply hover styling with visual feedback
                         if card_response.hovered() {
@@ -226,34 +232,29 @@ impl DashboardScreen {
     }
 
     fn load_data(&mut self, state: &AppState) {
-        if state.is_demo_mode() {
-            // Demo mode: Load from in-memory state
-            self.recent_projects = state.demo_projects.clone();
-        } else {
-            // Integrated mode: Load from API
-            let api_client = state.api_client.clone();
-            let event_queue = state.event_queue.clone();
+        // Load from API
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
 
-            if let Some(token) = &state.auth_token {
-                let token = token.clone();
+        if let Some(token) = &state.auth_token {
+            let token = token.clone();
 
-                wasm_bindgen_futures::spawn_local(async move {
-                    use crate::events::AppEvent;
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
 
-                    match api_client.get_projects(&token).await {
-                        Ok(projects) => {
-                            tracing::info!("Loaded {} projects", projects.len());
-                            event_queue.push(AppEvent::ProjectsLoaded { projects });
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to load projects: {:?}", e);
-                            event_queue.push(AppEvent::ProjectsLoaded {
-                                projects: Vec::new()
-                            });
-                        }
+                match api_client.get_projects(&token).await {
+                    Ok(projects) => {
+                        tracing::info!("Loaded {} projects", projects.len());
+                        event_queue.push(AppEvent::ProjectsLoaded { projects });
                     }
-                });
-            }
+                    Err(e) => {
+                        tracing::error!("Failed to load projects: {:?}", e);
+                        event_queue.push(AppEvent::ProjectsLoaded {
+                            projects: Vec::new()
+                        });
+                    }
+                }
+            });
         }
     }
 }

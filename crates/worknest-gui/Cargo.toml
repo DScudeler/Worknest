@@ -12,10 +12,6 @@ wasm-opt = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[[bin]]
-name = "worknest"
-path = "src/main.rs"
-
 [dependencies]
 # Workspace dependencies
 worknest-core = { path = "../worknest-core" }
