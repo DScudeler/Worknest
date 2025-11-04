@@ -109,81 +109,37 @@ pub struct ShortcutsHelp {
 
 impl ShortcutsHelp {
     pub fn new() -> Self {
-        let mut shortcuts = Vec::new();
-
-        // Navigation shortcuts
-        shortcuts.push(ShortcutDefinition::new(
-            Key::B,
-            Modifiers::COMMAND,
-            "Toggle sidebar",
-            "Navigation",
-        ));
-
-        // Global shortcuts
-        shortcuts.push(ShortcutDefinition::new(
-            Key::K,
-            Modifiers::COMMAND,
-            "Open command palette",
-            "Global",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Slash,
-            Modifiers::COMMAND,
-            "Quick search",
-            "Global",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Questionmark,
-            Modifiers::NONE,
-            "Show keyboard shortcuts",
-            "Global",
-        ));
-
-        // View shortcuts
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Num1,
-            Modifiers::COMMAND,
-            "Go to Dashboard",
-            "Views",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Num2,
-            Modifiers::COMMAND,
-            "Go to Projects",
-            "Views",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Num3,
-            Modifiers::COMMAND,
-            "Go to All Tickets",
-            "Views",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Num9,
-            Modifiers::COMMAND,
-            "Go to Settings",
-            "Views",
-        ));
-
-        // Action shortcuts
-        shortcuts.push(ShortcutDefinition::new(
-            Key::N,
-            Modifiers::COMMAND,
-            "Create new (context-aware)",
-            "Actions",
-        ));
-
-        shortcuts.push(ShortcutDefinition::new(
-            Key::Escape,
-            Modifiers::NONE,
-            "Close dialog/modal",
-            "Actions",
-        ));
+        let shortcuts = vec![
+            // Navigation shortcuts
+            ShortcutDefinition::new(Key::B, Modifiers::COMMAND, "Toggle sidebar", "Navigation"),
+            // Global shortcuts
+            ShortcutDefinition::new(Key::K, Modifiers::COMMAND, "Open command palette", "Global"),
+            ShortcutDefinition::new(Key::Slash, Modifiers::COMMAND, "Quick search", "Global"),
+            ShortcutDefinition::new(
+                Key::Questionmark,
+                Modifiers::NONE,
+                "Show keyboard shortcuts",
+                "Global",
+            ),
+            // View shortcuts
+            ShortcutDefinition::new(Key::Num1, Modifiers::COMMAND, "Go to Dashboard", "Views"),
+            ShortcutDefinition::new(Key::Num2, Modifiers::COMMAND, "Go to Projects", "Views"),
+            ShortcutDefinition::new(Key::Num3, Modifiers::COMMAND, "Go to All Tickets", "Views"),
+            ShortcutDefinition::new(Key::Num9, Modifiers::COMMAND, "Go to Settings", "Views"),
+            // Action shortcuts
+            ShortcutDefinition::new(
+                Key::N,
+                Modifiers::COMMAND,
+                "Create new (context-aware)",
+                "Actions",
+            ),
+            ShortcutDefinition::new(
+                Key::Escape,
+                Modifiers::NONE,
+                "Close dialog/modal",
+                "Actions",
+            ),
+        ];
 
         Self {
             is_open: false,
@@ -300,7 +256,7 @@ impl ShortcutsHelp {
         for shortcut in shortcuts {
             ui.horizontal(|ui| {
                 // Shortcut key combination (fixed width for alignment)
-                let key_text = RichText::new(&shortcut.format())
+                let key_text = RichText::new(shortcut.format())
                     .monospace()
                     .color(Colors::TEXT_SECONDARY);
 

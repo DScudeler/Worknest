@@ -148,7 +148,7 @@ impl EmptyStates {
         EmptyState::new(
             "🎫",
             "No Tickets in Project",
-            &format!(
+            format!(
                 "'{}' doesn't have any tickets yet. Create one to get started",
                 project_name
             ),
@@ -161,7 +161,7 @@ impl EmptyStates {
         EmptyState::new(
             "🔍",
             "No Results Found",
-            &format!("No results found for '{}'", query),
+            format!("No results found for '{}'", query),
         )
     }
 
@@ -206,7 +206,7 @@ impl EmptyStates {
         EmptyState::new(
             "🚧",
             "Coming Soon",
-            &format!("{} is currently under development", feature_name),
+            format!("{} is currently under development", feature_name),
         )
     }
 

@@ -228,27 +228,23 @@ impl TicketRepository {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         let sql = if project_id.is_some() {
-            format!(
-                "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
-                        t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
-                 FROM tickets t
-                 JOIN tickets_fts fts ON t.id = fts.ticket_id
-                 WHERE fts.tickets_fts MATCH ?1 AND t.project_id = ?2
-                 ORDER BY t.created_at DESC"
-            )
+            "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+             FROM tickets t
+             JOIN tickets_fts fts ON t.id = fts.ticket_id
+             WHERE fts.tickets_fts MATCH ?1 AND t.project_id = ?2
+             ORDER BY t.created_at DESC"
         } else {
-            format!(
-                "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
-                        t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
-                 FROM tickets t
-                 JOIN tickets_fts fts ON t.id = fts.ticket_id
-                 WHERE fts.tickets_fts MATCH ?1
-                 ORDER BY t.created_at DESC"
-            )
+            "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+             FROM tickets t
+             JOIN tickets_fts fts ON t.id = fts.ticket_id
+             WHERE fts.tickets_fts MATCH ?1
+             ORDER BY t.created_at DESC"
         };
 
         let mut stmt = conn
-            .prepare(&sql)
+            .prepare(sql)
             .map_err(|e| DbError::Query(e.to_string()))?;
 
         let tickets = if let Some(proj_id) = project_id {

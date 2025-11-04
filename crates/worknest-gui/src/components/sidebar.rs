@@ -92,14 +92,12 @@ impl Sidebar {
                         self.toggle();
                     }
                 });
-            } else {
-                if ui
-                    .button(RichText::new("≡").size(18.0))
-                    .on_hover_text("Expand sidebar (Ctrl/Cmd+B)")
-                    .clicked()
-                {
-                    self.toggle();
-                }
+            } else if ui
+                .button(RichText::new("≡").size(18.0))
+                .on_hover_text("Expand sidebar (Ctrl/Cmd+B)")
+                .clicked()
+            {
+                self.toggle();
             }
         });
 

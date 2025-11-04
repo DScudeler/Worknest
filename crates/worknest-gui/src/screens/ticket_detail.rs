@@ -55,13 +55,11 @@ impl TicketDetailScreen {
         }
 
         // Sync ticket from state
-        if self.ticket.is_none() || !false {
-            self.ticket = state
-                .tickets
-                .iter()
-                .find(|t| t.id == self.ticket_id)
-                .cloned();
-        }
+        self.ticket = state
+            .tickets
+            .iter()
+            .find(|t| t.id == self.ticket_id)
+            .cloned();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {

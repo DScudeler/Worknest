@@ -35,8 +35,8 @@ enum ThemeOption {
     Light,
 }
 
-impl SettingsScreen {
-    pub fn new() -> Self {
+impl Default for SettingsScreen {
+    fn default() -> Self {
         Self {
             active_tab: SettingsTab::Profile,
             edit_username: String::new(),
@@ -46,6 +46,12 @@ impl SettingsScreen {
             confirm_password: String::new(),
             selected_theme: ThemeOption::Dark,
         }
+    }
+}
+
+impl SettingsScreen {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn render(&mut self, ctx: &egui::Context, state: &mut AppState) {

@@ -87,7 +87,7 @@ impl TicketBoardScreen {
                 let column_width = calculated_width.max(280.0); // Minimum 280px per column
 
                 ui.horizontal_top(|ui| {
-                    let columns = vec![
+                    let columns = [
                         TicketStatus::Open,
                         TicketStatus::InProgress,
                         TicketStatus::Review,
