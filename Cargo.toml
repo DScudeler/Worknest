@@ -35,7 +35,7 @@ anyhow = "1.0"
 validator = { version = "0.20", features = ["derive"] }
 
 # Database
-rusqlite = { version = "0.37", features = ["bundled", "chrono", "uuid"] }
+rusqlite = { version = "0.38", features = ["bundled", "chrono", "uuid"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 refinery = { version = "0.9", features = ["rusqlite"] }
