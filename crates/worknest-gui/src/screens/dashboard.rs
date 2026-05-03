@@ -190,11 +190,13 @@ impl DashboardScreen {
                         // Extract the button click state
                         let view_clicked = group_response.inner;
 
-                        // Make the entire card area clickable
+                        // Make the entire card area clickable. Salt with the
+                        // project id so each card has a distinct Id (the loop
+                        // calls this once per recent project).
                         let card_rect = group_response.response.rect;
                         let card_response = ui.interact(
                             card_rect,
-                            ui.id().with("dashboard_project_card"),
+                            ui.id().with(("dashboard_project_card", project.id.0)),
                             egui::Sense::click(),
                         );
 

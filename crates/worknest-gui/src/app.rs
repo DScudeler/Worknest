@@ -147,6 +147,11 @@ impl WorknestApp {
 
 impl eframe::App for WorknestApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Plumb the egui context into the event queue so async API responses
+        // wake the UI immediately instead of waiting for the next mouse/key
+        // event. Idempotent — only the latest Context is kept.
+        self.state.event_queue.set_repaint_context(ctx.clone());
+
         // Process any pending events from async operations
         self.state.process_events();
 

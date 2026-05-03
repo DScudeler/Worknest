@@ -1,25 +1,48 @@
 //! Event system for async API callbacks
 
 use std::sync::{Arc, Mutex};
+
+use egui::Context;
 use worknest_core::models::{Comment, Project, Ticket, User};
 
-/// Event queue for handling async API responses
+/// Event queue for handling async API responses.
+///
+/// Async work runs via `wasm_bindgen_futures::spawn_local` and pushes results
+/// into this queue. egui's `App::update` only runs in response to input
+/// (mouse, key, ...), so without explicitly waking the runtime the UI sits
+/// frozen until the user wiggles the mouse. Storing an optional `egui::Context`
+/// here lets `push` call `request_repaint`, which schedules an immediate frame.
 #[derive(Clone)]
 pub struct EventQueue {
     events: Arc<Mutex<Vec<AppEvent>>>,
+    ctx: Arc<Mutex<Option<Context>>>,
 }
 
 impl EventQueue {
     pub fn new() -> Self {
         Self {
             events: Arc::new(Mutex::new(Vec::new())),
+            ctx: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Push an event to the queue
+    /// Plumb the egui context so `push` can wake the UI from an async task.
+    /// Cheap to call every frame — `Context` is `Arc`-backed.
+    pub fn set_repaint_context(&self, ctx: Context) {
+        if let Ok(mut c) = self.ctx.lock() {
+            *c = Some(ctx);
+        }
+    }
+
+    /// Push an event and request a repaint so the next frame fires immediately.
     pub fn push(&self, event: AppEvent) {
         if let Ok(mut events) = self.events.lock() {
             events.push(event);
+        }
+        if let Ok(c) = self.ctx.lock() {
+            if let Some(c) = c.as_ref() {
+                c.request_repaint();
+            }
         }
     }
 

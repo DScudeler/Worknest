@@ -205,11 +205,13 @@ impl ProjectListScreen {
         // Extract the button click states
         let (view_clicked, tickets_clicked, board_clicked, archive_clicked) = group_response.inner;
 
-        // Make the entire card area clickable
+        // Make the entire card area clickable. The id_salt must include the
+        // project id so each card gets a distinct Id; a constant salt collides
+        // when render_project_card runs in a loop.
         let card_rect = group_response.response.rect;
         let card_response = ui.interact(
             card_rect,
-            ui.id().with("project_card"),
+            ui.id().with(("project_card", project.id.0)),
             egui::Sense::click(),
         );
 

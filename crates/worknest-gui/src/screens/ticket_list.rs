@@ -252,10 +252,14 @@ impl TicketListScreen {
             });
         });
 
-        // Make the entire card area clickable
+        // Make the entire card area clickable. Salt with the ticket id so
+        // each card has a distinct Id when this is called in a loop.
         let card_rect = group_response.response.rect;
-        let card_response =
-            ui.interact(card_rect, ui.id().with("ticket_card"), egui::Sense::click());
+        let card_response = ui.interact(
+            card_rect,
+            ui.id().with(("ticket_card", ticket.id.0)),
+            egui::Sense::click(),
+        );
 
         if card_response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);

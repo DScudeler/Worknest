@@ -169,8 +169,12 @@ impl TicketBoardScreen {
                     ui.separator();
                     ui.add_space(Spacing::MEDIUM);
 
-                    // Column content with full height scroll
+                    // Column content with full height scroll. Each column needs
+                    // an id_salt; egui auto-IDs four ScrollAreas at the same
+                    // source location (this is called once per status) and
+                    // collides without it.
                     ScrollArea::vertical()
+                        .id_salt(format!("board_col_{:?}", status))
                         .max_height(available_height)
                         .show(ui, |ui| {
                             if column_tickets.is_empty() {

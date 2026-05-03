@@ -22,6 +22,8 @@ Thumbs.db
 *.db-shm
 *.db-wal
 worknest.toml
+# Runtime upload destination (configured in worknest-api/src/main.rs)
+uploads/
 
 # Logs
 *.log
