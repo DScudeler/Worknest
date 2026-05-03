@@ -8,6 +8,13 @@ export interface UserDto {
     updated_at: string;
 }
 
+/// Returned by GET /api/users — minimal projection so emails don't leak across
+/// users. Use UserDto only for the authenticated user's own record (/api/users/me).
+export interface PublicUserDto {
+    id: string;
+    username: string;
+}
+
 export interface ProjectDto {
     id: string;
     name: string;

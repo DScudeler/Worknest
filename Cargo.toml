@@ -55,12 +55,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "signal"] }
 
 # Web framework
 axum = { version = "0.8", features = ["multipart"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
 hyper = { version = "1.7", features = ["full"] }
 
 # Testing

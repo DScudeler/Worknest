@@ -271,7 +271,17 @@ impl TicketListScreen {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(500.0);
+                ui.set_min_width(
+                    (ctx.input(|i| {
+                        i.raw.screen_rect.unwrap_or(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::Vec2::new(800.0, 600.0),
+                        ))
+                    })
+                    .width()
+                        * 0.6)
+                        .clamp(300.0, 600.0),
+                );
 
                 ui.label("Title");
                 ui.add(
@@ -358,15 +368,7 @@ impl TicketListScreen {
 
             ticket.priority = self.new_ticket_priority;
 
-            if false {
-                // Demo mode: Add to in-memory state
-                state.tickets.push(ticket);
-                state.notify_success("Ticket created successfully (Demo Mode)".to_string());
-                self.show_create_dialog = false;
-                self.clear_create_form();
-                self.load_tickets(state);
-            } else {
-                // Integrated mode: Call real API
+            {
                 let api_client = state.api_client.clone();
                 let event_queue = state.event_queue.clone();
                 let token = match &state.auth_token {
@@ -431,20 +433,7 @@ impl TicketListScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
-        if false {
-            // Demo mode: Load from in-memory state
-            self.tickets = if let Some(project_id) = self.project_id {
-                state
-                    .tickets
-                    .iter()
-                    .filter(|t| t.project_id == project_id)
-                    .cloned()
-                    .collect()
-            } else {
-                state.tickets.clone()
-            };
-        } else {
-            // Integrated mode: Load from API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {

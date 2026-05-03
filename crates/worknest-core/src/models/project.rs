@@ -8,6 +8,7 @@ use super::user::UserId;
 
 /// Project identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {

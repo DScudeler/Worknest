@@ -28,6 +28,19 @@ pub struct TicketDetailScreen {
     new_comment_content: String,
     editing_comment_id: Option<CommentId>,
     edit_comment_content: String,
+    // Confirmation dialog
+    show_delete_confirm: bool,
+    /// Snapshots of `AppState` event counters from last render. Used to detect
+    /// async outcomes without relying on synchronous state right after
+    /// `spawn_local`.
+    last_ticket_update_seq: u64,
+    last_ticket_delete_seq: u64,
+    /// True when an edit-save round-trip is in flight; cleared when the
+    /// `TicketUpdated` event arrives.
+    edit_save_pending: bool,
+    /// Set to the parent `project_id` when a delete is in flight; once the
+    /// `TicketDeleted` event arrives the screen navigates back.
+    delete_navigate_to: Option<worknest_core::models::ProjectId>,
 }
 
 impl TicketDetailScreen {
@@ -45,6 +58,11 @@ impl TicketDetailScreen {
             new_comment_content: String::new(),
             editing_comment_id: None,
             edit_comment_content: String::new(),
+            show_delete_confirm: false,
+            last_ticket_update_seq: 0,
+            last_ticket_delete_seq: 0,
+            edit_save_pending: false,
+            delete_navigate_to: None,
         }
     }
 
@@ -54,12 +72,62 @@ impl TicketDetailScreen {
             self.data_loaded = true;
         }
 
+        // Edit-save completion: when TicketUpdated fires, close the form.
+        if self.edit_save_pending && state.ticket_update_seq != self.last_ticket_update_seq {
+            self.is_editing = false;
+            self.edit_save_pending = false;
+        }
+        self.last_ticket_update_seq = state.ticket_update_seq;
+
+        // Delete completion: when TicketDeleted fires, navigate back to the
+        // owning ticket list. On failure the counter doesn't advance and we
+        // stay on the detail screen with an error toast.
+        if let Some(project_id) = self.delete_navigate_to {
+            if state.ticket_delete_seq != self.last_ticket_delete_seq {
+                self.delete_navigate_to = None;
+                state.navigate_to(Screen::TicketList {
+                    project_id: Some(project_id),
+                });
+                return;
+            }
+        }
+        self.last_ticket_delete_seq = state.ticket_delete_seq;
+
         // Sync ticket from state
         self.ticket = state
             .tickets
             .iter()
             .find(|t| t.id == self.ticket_id)
             .cloned();
+
+        // Delete confirmation dialog
+        if self.show_delete_confirm {
+            if let Some(ticket) = self.ticket.clone() {
+                egui::Window::new("Confirm Delete")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .show(ctx, |ui| {
+                        ui.label("Are you sure you want to delete this ticket?");
+                        ui.label(
+                            RichText::new("This action cannot be undone.").color(Colors::ERROR),
+                        );
+                        ui.add_space(Spacing::MEDIUM);
+                        ui.horizontal(|ui| {
+                            if ui.button("Cancel").clicked() {
+                                self.show_delete_confirm = false;
+                            }
+                            if ui
+                                .add(egui::Button::new("Delete").fill(Colors::ERROR))
+                                .clicked()
+                            {
+                                self.show_delete_confirm = false;
+                                self.delete_ticket(state, &ticket);
+                            }
+                        });
+                    });
+            }
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
@@ -90,7 +158,7 @@ impl TicketDetailScreen {
                                     .add(egui::Button::new("Delete").fill(Colors::ERROR))
                                     .clicked()
                                 {
-                                    self.delete_ticket(state, &ticket);
+                                    self.show_delete_confirm = true;
                                 }
                             });
                         }
@@ -327,16 +395,7 @@ impl TicketDetailScreen {
             ticket.status = self.edit_status;
             ticket.priority = self.edit_priority;
 
-            if false {
-                // Demo mode: Update in-memory state
-                if let Some(t) = state.tickets.iter_mut().find(|t| t.id == ticket.id) {
-                    *t = ticket;
-                    state.notify_success("Ticket updated (Demo Mode)".to_string());
-                    self.is_editing = false;
-                    self.load_data(state);
-                }
-            } else {
-                // Integrated mode: Call real API
+            {
                 let api_client = state.api_client.clone();
                 let event_queue = state.event_queue.clone();
                 let token = match &state.auth_token {
@@ -358,7 +417,7 @@ impl TicketDetailScreen {
                 let priority = self.edit_priority.to_string().to_lowercase();
                 let ticket_type = self.edit_type.to_string().to_lowercase();
 
-                self.is_editing = false;
+                self.edit_save_pending = true;
                 state.is_loading = true;
 
                 wasm_bindgen_futures::spawn_local(async move {
@@ -371,7 +430,7 @@ impl TicketDetailScreen {
                         status: Some(status),
                         priority: Some(priority),
                         ticket_type: Some(ticket_type),
-                        assigned_to: None,
+                        assignee_id: None,
                     };
 
                     match api_client
@@ -397,18 +456,7 @@ impl TicketDetailScreen {
     }
 
     fn update_status(&mut self, state: &mut AppState, new_status: TicketStatus) {
-        if false {
-            // Demo mode: Update in-memory state
-            if let Some(ticket) = state.tickets.iter_mut().find(|t| t.id == self.ticket_id) {
-                ticket.status = new_status;
-                state.notify_success(format!(
-                    "Ticket status updated to {:?} (Demo Mode)",
-                    new_status
-                ));
-                self.load_data(state);
-            }
-        } else {
-            // Integrated mode: Call real API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {
@@ -434,7 +482,7 @@ impl TicketDetailScreen {
                     status: Some(status_string),
                     priority: None,
                     ticket_type: None,
-                    assigned_to: None,
+                    assignee_id: None,
                 };
 
                 match api_client
@@ -459,15 +507,7 @@ impl TicketDetailScreen {
     }
 
     fn delete_ticket(&mut self, state: &mut AppState, ticket: &Ticket) {
-        if false {
-            // Demo mode: Remove from in-memory state
-            state.tickets.retain(|t| t.id != ticket.id);
-            state.notify_success("Ticket deleted (Demo Mode)".to_string());
-            state.navigate_to(Screen::TicketList {
-                project_id: Some(ticket.project_id),
-            });
-        } else {
-            // Integrated mode: Call real API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {
@@ -482,6 +522,9 @@ impl TicketDetailScreen {
             let ticket_id_string = ticket.id.to_string();
             let project_id = ticket.project_id;
 
+            // Don't navigate yet — wait for TicketDeleted to confirm. The
+            // render loop watches `delete_navigate_to` for the trigger.
+            self.delete_navigate_to = Some(project_id);
             state.is_loading = true;
 
             wasm_bindgen_futures::spawn_local(async move {
@@ -502,35 +545,23 @@ impl TicketDetailScreen {
                     },
                 }
             });
-
-            // Navigate back to list immediately
-            state.navigate_to(Screen::TicketList {
-                project_id: Some(project_id),
-            });
         }
     }
 
     fn load_data(&mut self, state: &AppState) {
-        if false {
-            // Demo mode: Load from in-memory state
-            self.ticket = state
-                .tickets
-                .iter()
-                .find(|t| t.id == self.ticket_id)
-                .cloned();
-        } else {
-            // Integrated mode: Load from API
+        let token = match &state.auth_token {
+            Some(t) => t.clone(),
+            None => return,
+        };
+        let ticket_id_uuid = self.ticket_id.0;
+
+        // Ticket
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
-            let token = match &state.auth_token {
-                Some(t) => t.clone(),
-                None => return,
-            };
-            let ticket_id_uuid = self.ticket_id.0;
-
+            let token = token.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 use crate::events::AppEvent;
-
                 match api_client.get_ticket(&token, ticket_id_uuid).await {
                     Ok(ticket) => {
                         tracing::info!("Loaded ticket: {}", ticket.title);
@@ -539,6 +570,27 @@ impl TicketDetailScreen {
                     Err(e) => {
                         tracing::error!("Failed to load ticket: {:?}", e);
                         event_queue.push(AppEvent::TicketError {
+                            message: e.to_string(),
+                        });
+                    },
+                }
+            });
+        }
+
+        // Comments — previously missing, so the comments section was always
+        // empty until a new comment was created locally.
+        {
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::events::AppEvent;
+                match api_client.get_ticket_comments(&token, ticket_id_uuid).await {
+                    Ok(comments) => {
+                        event_queue.push(AppEvent::CommentsLoaded { comments });
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to load comments: {:?}", e);
+                        event_queue.push(AppEvent::CommentError {
                             message: e.to_string(),
                         });
                     },
@@ -709,25 +761,7 @@ impl TicketDetailScreen {
             return;
         }
 
-        if false {
-            // Demo mode: Create comment in memory
-            if let Some(user) = &state.current_user {
-                let comment = Comment::new(ticket.id, user.id, content);
-
-                // Validate comment
-                if let Err(e) = comment.validate() {
-                    state.notify_error(format!("Invalid comment: {}", e));
-                    return;
-                }
-
-                state.comments.push(comment);
-                state.notify_success("Comment added (Demo Mode)".to_string());
-                self.new_comment_content.clear();
-            } else {
-                state.notify_error("Not authenticated".to_string());
-            }
-        } else {
-            // Integrated mode: Call real API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {
@@ -774,19 +808,7 @@ impl TicketDetailScreen {
             return;
         }
 
-        if false {
-            // Demo mode: Update comment in memory
-            if let Some(comment) = state.comments.iter_mut().find(|c| c.id == comment_id) {
-                if let Err(e) = comment.update_content(content) {
-                    state.notify_error(format!("Invalid comment: {}", e));
-                    return;
-                }
-                state.notify_success("Comment updated (Demo Mode)".to_string());
-                self.editing_comment_id = None;
-                self.edit_comment_content.clear();
-            }
-        } else {
-            // Integrated mode: Call real API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {
@@ -828,12 +850,7 @@ impl TicketDetailScreen {
     }
 
     fn delete_comment(&mut self, state: &mut AppState, comment_id: CommentId) {
-        if false {
-            // Demo mode: Delete from memory
-            state.comments.retain(|c| c.id != comment_id);
-            state.notify_success("Comment deleted (Demo Mode)".to_string());
-        } else {
-            // Integrated mode: Call real API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {

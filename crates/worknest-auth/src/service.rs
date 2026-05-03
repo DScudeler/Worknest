@@ -140,16 +140,26 @@ impl AuthService {
         self.token_manager.verify_token(token)
     }
 
-    /// Get user from token
+    /// Get user from token. Rejects tokens that were issued before the user's
+    /// last password change — this is how we revoke active sessions on
+    /// password rotation without server-side session storage.
     ///
     /// # Arguments
     /// * `token` - The JWT token string
     ///
     /// # Returns
-    /// The user if token is valid
+    /// The user if token is valid and was issued after the last password change
     pub fn get_user_from_token(&self, token: &str) -> Result<User> {
         let claims = self.verify_token(token)?;
         let user_id = claims.user_id()?;
+
+        let pwd_changed_at = self
+            .user_repo
+            .get_password_changed_at(user_id)
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        if claims.iat < pwd_changed_at {
+            return Err(AuthError::TokenInvalid);
+        }
 
         self.user_repo
             .find_by_id(user_id)
@@ -225,7 +235,7 @@ mod tests {
         let service = setup_auth_service();
 
         let user = service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
         assert_eq!(user.username, "testuser");
@@ -237,10 +247,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test1@example.com", "password123")
+            .register("testuser", "test1@example.com", "Password123!")
             .unwrap();
 
-        let result = service.register("testuser", "test2@example.com", "password123");
+        let result = service.register("testuser", "test2@example.com", "Password123!");
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::UserExists));
@@ -251,10 +261,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("user1", "test@example.com", "password123")
+            .register("user1", "test@example.com", "Password123!")
             .unwrap();
 
-        let result = service.register("user2", "test@example.com", "password123");
+        let result = service.register("user2", "test@example.com", "Password123!");
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::UserExists));
@@ -265,10 +275,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let token = service.login("testuser", "password123").unwrap();
+        let token = service.login("testuser", "Password123!").unwrap();
 
         assert!(!token.token.is_empty());
     }
@@ -278,10 +288,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let token = service.login("test@example.com", "password123").unwrap();
+        let token = service.login("test@example.com", "Password123!").unwrap();
 
         assert!(!token.token.is_empty());
     }
@@ -291,10 +301,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let result = service.login("testuser", "wrongpassword");
+        let result = service.login("testuser", "WrongPassword1!");
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::InvalidCredentials));
@@ -304,7 +314,7 @@ mod tests {
     fn test_login_nonexistent_user() {
         let service = setup_auth_service();
 
-        let result = service.login("nonexistent", "password123");
+        let result = service.login("nonexistent", "Password123!");
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::InvalidCredentials));
@@ -315,10 +325,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let token = service.login("testuser", "password123").unwrap();
+        let token = service.login("testuser", "Password123!").unwrap();
         let claims = service.verify_token(&token.token).unwrap();
 
         assert_eq!(claims.username, "testuser");
@@ -329,10 +339,10 @@ mod tests {
         let service = setup_auth_service();
 
         let registered_user = service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let token = service.login("testuser", "password123").unwrap();
+        let token = service.login("testuser", "Password123!").unwrap();
         let user = service.get_user_from_token(&token.token).unwrap();
 
         assert_eq!(user.id, registered_user.id);
@@ -344,10 +354,10 @@ mod tests {
         let service = setup_auth_service();
 
         service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let token = service.login("testuser", "password123").unwrap();
+        let token = service.login("testuser", "Password123!").unwrap();
         let refreshed = service.refresh_token(&token.token).unwrap();
 
         assert_ne!(token.token, refreshed.token);
@@ -362,21 +372,52 @@ mod tests {
         let service = setup_auth_service();
 
         let user = service
-            .register("testuser", "test@example.com", "oldpassword")
+            .register("testuser", "test@example.com", "OldPassword1!")
             .unwrap();
 
         // Change password
         service
-            .change_password(user.id, "oldpassword", "newpassword")
+            .change_password(user.id, "OldPassword1!", "NewPassword1!")
             .unwrap();
 
         // Old password should not work
-        let result = service.login("testuser", "oldpassword");
+        let result = service.login("testuser", "OldPassword1!");
         assert!(result.is_err());
 
         // New password should work
-        let token = service.login("testuser", "newpassword").unwrap();
+        let token = service.login("testuser", "NewPassword1!").unwrap();
         assert!(!token.token.is_empty());
+    }
+
+    #[test]
+    fn test_change_password_invalidates_existing_tokens() {
+        // Tokens issued before a password change must stop verifying once
+        // the password is rotated — that's the only revocation path we have.
+        let service = setup_auth_service();
+
+        let user = service
+            .register("testuser", "test@example.com", "OldPassword1!")
+            .unwrap();
+        let stale_token = service.login("testuser", "OldPassword1!").unwrap();
+
+        // Sleep a beat so the new password_changed_at timestamp is strictly
+        // greater than the token's `iat` (both are second-resolution).
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        service
+            .change_password(user.id, "OldPassword1!", "NewPassword1!")
+            .unwrap();
+
+        let result = service.get_user_from_token(&stale_token.token);
+        assert!(
+            result.is_err(),
+            "stale token should be rejected after password change"
+        );
+        assert!(matches!(result.unwrap_err(), AuthError::TokenInvalid));
+
+        // A token issued after the change continues to work.
+        let fresh_token = service.login("testuser", "NewPassword1!").unwrap();
+        assert!(service.get_user_from_token(&fresh_token.token).is_ok());
     }
 
     #[test]
@@ -384,10 +425,10 @@ mod tests {
         let service = setup_auth_service();
 
         let user = service
-            .register("testuser", "test@example.com", "password123")
+            .register("testuser", "test@example.com", "Password123!")
             .unwrap();
 
-        let result = service.change_password(user.id, "wrongpassword", "newpassword");
+        let result = service.change_password(user.id, "WrongPassword1!", "NewPassword1!");
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::InvalidCredentials));
@@ -397,7 +438,7 @@ mod tests {
     fn test_register_weak_password() {
         let service = setup_auth_service();
 
-        let result = service.register("testuser", "test@example.com", "weak");
+        let result = service.register("testuser", "test@example.com", "weak"); // too short + missing complexity
 
         assert!(result.is_err());
         assert!(matches!(

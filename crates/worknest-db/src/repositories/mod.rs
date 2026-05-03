@@ -9,5 +9,24 @@ pub mod user_repository;
 pub use attachment_repository::AttachmentRepository;
 pub use comment_repository::CommentRepository;
 pub use project_repository::ProjectRepository;
-pub use ticket_repository::TicketRepository;
+pub use ticket_repository::{TicketFilters, TicketRepository, TicketSort};
 pub use user_repository::UserRepository;
+
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+/// Parse a UUID string from a SQLite TEXT column.
+pub(crate) fn parse_uuid(s: &str) -> rusqlite::Result<Uuid> {
+    Uuid::parse_str(s).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+    })
+}
+
+/// Parse an RFC 3339 datetime from a SQLite TEXT column, returning UTC.
+pub(crate) fn parse_datetime(s: &str) -> rusqlite::Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+        })
+}

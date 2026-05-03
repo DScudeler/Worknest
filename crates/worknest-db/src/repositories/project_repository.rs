@@ -1,9 +1,8 @@
 //! Project repository implementation
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension, Row};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use worknest_core::models::{Project, ProjectId, UserId};
 
@@ -252,23 +251,21 @@ impl Repository<Project, ProjectId> for ProjectRepository {
     }
 }
 
+use super::{parse_datetime, parse_uuid};
+
 /// Convert a database row to a Project
 fn row_to_project(row: &Row) -> rusqlite::Result<Project> {
     let id_str: String = row.get(0)?;
-    let id = ProjectId::from_uuid(Uuid::parse_str(&id_str).unwrap());
+    let id = ProjectId::from_uuid(parse_uuid(&id_str)?);
 
     let created_by_str: String = row.get(5)?;
-    let created_by = UserId::from_uuid(Uuid::parse_str(&created_by_str).unwrap());
+    let created_by = UserId::from_uuid(parse_uuid(&created_by_str)?);
 
     let created_at_str: String = row.get(6)?;
-    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let created_at = parse_datetime(&created_at_str)?;
 
     let updated_at_str: String = row.get(7)?;
-    let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let updated_at = parse_datetime(&updated_at_str)?;
 
     let archived: i32 = row.get(4)?;
 

@@ -28,6 +28,26 @@ impl ApiClient {
         format!("{}/api{}", self.base_url, path)
     }
 
+    /// Parse error response from the API, extracting the error message
+    async fn parse_error(response: reqwest::Response, fallback: &str) -> anyhow::Error {
+        let status = response.status();
+        let msg = match status.as_u16() {
+            401 => "Authentication required. Please log in again.".to_string(),
+            403 => "You do not have permission to perform this action.".to_string(),
+            404 => "The requested resource was not found.".to_string(),
+            429 => "Too many requests. Please try again later.".to_string(),
+            _ => {
+                // Try to extract error message from response body
+                if let Ok(body) = response.json::<ErrorBody>().await {
+                    body.error
+                } else {
+                    format!("{}: {}", fallback, status)
+                }
+            },
+        };
+        anyhow!(msg)
+    }
+
     // Auth endpoints
     pub async fn register(&self, request: RegisterRequest) -> Result<AuthResponse> {
         let response = self
@@ -40,7 +60,7 @@ impl ApiClient {
         if response.status().is_success() {
             Ok(response.json().await?)
         } else {
-            Err(anyhow!("Registration failed: {}", response.status()))
+            Err(Self::parse_error(response, "Registration failed").await)
         }
     }
 
@@ -55,7 +75,7 @@ impl ApiClient {
         if response.status().is_success() {
             Ok(response.json().await?)
         } else {
-            Err(anyhow!("Login failed: {}", response.status()))
+            Err(Self::parse_error(response, "Login failed").await)
         }
     }
 
@@ -71,7 +91,7 @@ impl ApiClient {
         if response.status().is_success() {
             Ok(response.json().await?)
         } else {
-            Err(anyhow!("Failed to get user: {}", response.status()))
+            Err(Self::parse_error(response, "Failed to get user").await)
         }
     }
 
@@ -86,8 +106,54 @@ impl ApiClient {
         if response.status().is_success() {
             Ok(response.json().await?)
         } else {
-            Err(anyhow!("Failed to get users: {}", response.status()))
+            Err(Self::parse_error(response, "Failed to get users").await)
         }
+    }
+
+    pub async fn update_current_user(
+        &self,
+        token: &str,
+        request: UpdateUserRequest,
+    ) -> Result<User> {
+        let response = self
+            .client
+            .put(self.api_url("/users/me"))
+            .bearer_auth(token)
+            .json(&request)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(Self::parse_error(response, "Failed to update profile").await)
+        }
+    }
+
+    pub async fn change_password(&self, token: &str, request: ChangePasswordRequest) -> Result<()> {
+        let response = self
+            .client
+            .post(self.api_url("/users/me/password"))
+            .bearer_auth(token)
+            .json(&request)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(Self::parse_error(response, "Failed to change password").await)
+        }
+    }
+
+    pub async fn logout(&self, token: &str) -> Result<()> {
+        let _ = self
+            .client
+            .post(self.api_url("/auth/logout"))
+            .bearer_auth(token)
+            .send()
+            .await;
+        Ok(())
     }
 
     // Project endpoints
@@ -384,6 +450,11 @@ impl ApiClient {
 // Request/Response types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct ErrorBody {
+    error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
@@ -431,7 +502,7 @@ pub struct UpdateTicketRequest {
     pub status: Option<String>,
     pub priority: Option<String>,
     pub ticket_type: Option<String>,
-    pub assigned_to: Option<Uuid>,
+    pub assignee_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -442,4 +513,16 @@ pub struct CreateCommentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCommentRequest {
     pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateUserRequest {
+    pub username: Option<String>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub old_password: String,
+    pub new_password: String,
 }

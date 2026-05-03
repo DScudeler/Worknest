@@ -31,6 +31,14 @@ pub struct AppState {
     pub tickets: Vec<Ticket>,
     /// Cached comments from API
     pub comments: Vec<Comment>,
+    /// Monotonic counter incremented every time a password change succeeds.
+    /// Screens compare it against a snapshot to know when to clear input fields.
+    pub password_change_seq: u64,
+    /// Monotonic counter incremented on every TicketUpdated event. Screens use
+    /// it to detect when an edit-save round-trip has completed successfully.
+    pub ticket_update_seq: u64,
+    /// Monotonic counter incremented on every TicketDeleted event.
+    pub ticket_delete_seq: u64,
 }
 
 impl AppState {
@@ -47,6 +55,9 @@ impl AppState {
             projects: Vec::new(),
             tickets: Vec::new(),
             comments: Vec::new(),
+            password_change_seq: 0,
+            ticket_update_seq: 0,
+            ticket_delete_seq: 0,
         }
     }
 
@@ -93,6 +104,7 @@ impl AppState {
                 },
                 AppEvent::ProjectError { message } => {
                     self.notify_error(format!("Project error: {}", message));
+                    self.is_loading = false;
                 },
                 AppEvent::TicketsLoaded { tickets } => {
                     self.tickets = tickets;
@@ -106,17 +118,22 @@ impl AppState {
                     if let Some(t) = self.tickets.iter_mut().find(|t| t.id == ticket.id) {
                         *t = ticket;
                     }
+                    self.ticket_update_seq = self.ticket_update_seq.wrapping_add(1);
+                    self.is_loading = false;
                     self.notify_success("Ticket updated successfully!".to_string());
                 },
                 AppEvent::TicketDeleted { ticket_id } => {
                     use worknest_core::models::TicketId;
                     if let Ok(id) = TicketId::from_string(&ticket_id) {
                         self.tickets.retain(|t| t.id != id);
+                        self.ticket_delete_seq = self.ticket_delete_seq.wrapping_add(1);
+                        self.is_loading = false;
                         self.notify_success("Ticket deleted successfully!".to_string());
                     }
                 },
                 AppEvent::TicketError { message } => {
                     self.notify_error(format!("Ticket error: {}", message));
+                    self.is_loading = false;
                 },
                 AppEvent::CommentsLoaded { comments } => {
                     self.comments = comments;
@@ -141,6 +158,7 @@ impl AppState {
                 },
                 AppEvent::CommentError { message } => {
                     self.notify_error(format!("Comment error: {}", message));
+                    self.is_loading = false;
                 },
                 AppEvent::ApiError { message } => {
                     self.notify_error(format!("API error: {}", message));
@@ -148,6 +166,27 @@ impl AppState {
                 },
                 AppEvent::LoadingComplete => {
                     self.is_loading = false;
+                },
+                AppEvent::ProfileUpdated { user } => {
+                    self.current_user = Some(user.clone());
+                    // Re-persist so a page refresh sees the new username/email.
+                    use gloo_storage::{LocalStorage, Storage};
+                    let _ = LocalStorage::set("current_user", user);
+                    self.is_loading = false;
+                    self.notify_success("Profile updated".to_string());
+                },
+                AppEvent::ProfileUpdateError { message } => {
+                    self.is_loading = false;
+                    self.notify_error(format!("Profile update failed: {}", message));
+                },
+                AppEvent::PasswordChanged => {
+                    self.is_loading = false;
+                    self.password_change_seq = self.password_change_seq.wrapping_add(1);
+                    self.notify_success("Password changed".to_string());
+                },
+                AppEvent::PasswordChangeError { message } => {
+                    self.is_loading = false;
+                    self.notify_error(format!("Password change failed: {}", message));
                 },
                 AppEvent::ProjectLoaded { project } => {
                     // Update single project in list if it exists
@@ -210,6 +249,13 @@ impl AppState {
     pub fn logout(&mut self) {
         self.current_user = None;
         self.auth_token = None;
+
+        // Clear cached data
+        self.projects.clear();
+        self.tickets.clear();
+        self.comments.clear();
+        self.notifications.clear();
+
         self.navigate_to(Screen::Login);
 
         // Clear local storage

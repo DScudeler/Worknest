@@ -33,8 +33,13 @@ pub fn init_pool<P: AsRef<Path>>(database_path: P) -> Result<DbPool> {
             Ok(())
         });
 
+    let pool_size: u32 = std::env::var("WORKNEST_DB_POOL_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(16);
+
     let pool = Pool::builder()
-        .max_size(16)
+        .max_size(pool_size)
         .build(manager)
         .map_err(|e| DbError::Connection(e.to_string()))?;
 

@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 /// User identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct UserId(pub Uuid);
 
 impl UserId {

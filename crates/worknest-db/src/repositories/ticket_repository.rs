@@ -1,15 +1,39 @@
 //! Ticket repository implementation
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension, Row};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use worknest_core::models::{
     Priority, ProjectId, Ticket, TicketId, TicketStatus, TicketType, UserId,
 };
 
 use crate::{connection::DbPool, repository::Repository, DbError, Result};
+
+/// Sort order for `find_with_filters`.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum TicketSort {
+    #[default]
+    None,
+    CreatedAtDesc,
+    UpdatedAtDesc,
+    PriorityHighFirst,
+}
+
+/// Filter set for `find_with_filters`. Any `None` field is omitted from the
+/// generated WHERE clause. `caller_id` triggers visibility scoping (creator,
+/// assignee, or owner of parent project).
+#[derive(Debug, Default)]
+pub struct TicketFilters {
+    pub project_id: Option<ProjectId>,
+    pub status: Option<TicketStatus>,
+    pub priority: Option<Priority>,
+    pub assignee_id: Option<UserId>,
+    pub caller_id: Option<UserId>,
+    pub sort: TicketSort,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
 
 /// Ticket repository for database operations
 pub struct TicketRepository {
@@ -220,6 +244,102 @@ impl TicketRepository {
         Ok(())
     }
 
+    /// Find tickets matching the given filters, with authorization, sort, and
+    /// pagination pushed into SQL. The previous implementation loaded the
+    /// entire `tickets` table into memory and filtered in Rust — this is the
+    /// SQL-side replacement.
+    pub fn find_with_filters(&self, f: &TicketFilters) -> Result<Vec<Ticket>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        // Build the WHERE clause and params dynamically. We use named binds
+        // via positional `?N` for clarity; collect into a Vec<Box<dyn ToSql>>.
+        let mut clauses: Vec<String> = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(caller) = f.caller_id {
+            // visibility: ticket creator OR assignee OR owner of parent project
+            let n1 = params_vec.len() + 1;
+            params_vec.push(Box::new(caller.0.to_string()));
+            let n2 = params_vec.len() + 1;
+            params_vec.push(Box::new(caller.0.to_string()));
+            let n3 = params_vec.len() + 1;
+            params_vec.push(Box::new(caller.0.to_string()));
+            clauses.push(format!(
+                "(t.created_by = ?{n1} OR t.assignee_id = ?{n2} \
+                  OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.created_by = ?{n3}))"
+            ));
+        }
+        if let Some(project_id) = f.project_id {
+            let n = params_vec.len() + 1;
+            params_vec.push(Box::new(project_id.0.to_string()));
+            clauses.push(format!("t.project_id = ?{n}"));
+        }
+        if let Some(status) = f.status {
+            let n = params_vec.len() + 1;
+            params_vec.push(Box::new(status_to_string(&status)));
+            clauses.push(format!("t.status = ?{n}"));
+        }
+        if let Some(priority) = f.priority {
+            let n = params_vec.len() + 1;
+            params_vec.push(Box::new(priority_to_string(&priority)));
+            clauses.push(format!("t.priority = ?{n}"));
+        }
+        if let Some(assignee_id) = f.assignee_id {
+            let n = params_vec.len() + 1;
+            params_vec.push(Box::new(assignee_id.0.to_string()));
+            clauses.push(format!("t.assignee_id = ?{n}"));
+        }
+
+        let where_sql = if clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", clauses.join(" AND "))
+        };
+
+        let order_sql = match f.sort {
+            TicketSort::CreatedAtDesc => " ORDER BY t.created_at DESC",
+            TicketSort::UpdatedAtDesc => " ORDER BY t.updated_at DESC",
+            TicketSort::PriorityHighFirst => {
+                " ORDER BY CASE t.priority \
+                  WHEN 'critical' THEN 0 WHEN 'high' THEN 1 \
+                  WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
+            },
+            TicketSort::None => "",
+        };
+
+        // Pagination clamps. SQLite treats negative LIMIT as "no limit"; we
+        // apply OFFSET only when LIMIT is set.
+        let mut tail = String::new();
+        if let Some(limit) = f.limit {
+            tail.push_str(&format!(" LIMIT {limit}"));
+            if let Some(offset) = f.offset {
+                tail.push_str(&format!(" OFFSET {offset}"));
+            }
+        }
+
+        let sql = format!(
+            "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+             FROM tickets t{where_sql}{order_sql}{tail}"
+        );
+
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| DbError::Query(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|b| b.as_ref()).collect();
+        let tickets = stmt
+            .query_map(rusqlite::params_from_iter(params_refs), row_to_ticket)
+            .map_err(|e| DbError::Query(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(tickets)
+    }
+
     /// Search tickets using full-text search
     pub fn search(&self, query: &str, project_id: Option<ProjectId>) -> Result<Vec<Ticket>> {
         let conn = self
@@ -394,13 +514,15 @@ impl Repository<Ticket, TicketId> for TicketRepository {
     }
 }
 
+use super::{parse_datetime, parse_uuid};
+
 /// Convert a database row to a Ticket
 fn row_to_ticket(row: &Row) -> rusqlite::Result<Ticket> {
     let id_str: String = row.get(0)?;
-    let id = TicketId::from_uuid(Uuid::parse_str(&id_str).unwrap());
+    let id = TicketId::from_uuid(parse_uuid(&id_str)?);
 
     let project_id_str: String = row.get(1)?;
-    let project_id = ProjectId::from_uuid(Uuid::parse_str(&project_id_str).unwrap());
+    let project_id = ProjectId::from_uuid(parse_uuid(&project_id_str)?);
 
     let ticket_type_str: String = row.get(4)?;
     let ticket_type = string_to_ticket_type(&ticket_type_str);
@@ -412,27 +534,25 @@ fn row_to_ticket(row: &Row) -> rusqlite::Result<Ticket> {
     let priority = string_to_priority(&priority_str);
 
     let assignee_id: Option<String> = row.get(7)?;
-    let assignee_id = assignee_id.map(|s| UserId::from_uuid(Uuid::parse_str(&s).unwrap()));
+    let assignee_id = match assignee_id {
+        Some(s) => Some(UserId::from_uuid(parse_uuid(&s)?)),
+        None => None,
+    };
 
     let created_by_str: String = row.get(8)?;
-    let created_by = UserId::from_uuid(Uuid::parse_str(&created_by_str).unwrap());
+    let created_by = UserId::from_uuid(parse_uuid(&created_by_str)?);
 
     let due_date: Option<String> = row.get(9)?;
-    let due_date = due_date.map(|s| {
-        DateTime::parse_from_rfc3339(&s)
-            .unwrap()
-            .with_timezone(&Utc)
-    });
+    let due_date = match due_date {
+        Some(s) => Some(parse_datetime(&s)?),
+        None => None,
+    };
 
     let created_at_str: String = row.get(11)?;
-    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let created_at = parse_datetime(&created_at_str)?;
 
     let updated_at_str: String = row.get(12)?;
-    let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let updated_at = parse_datetime(&updated_at_str)?;
 
     Ok(Ticket {
         id,

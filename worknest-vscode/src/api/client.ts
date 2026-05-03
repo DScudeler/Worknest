@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import {
     AuthResponse,
     UserDto,
+    PublicUserDto,
     ProjectDto,
     TicketDto,
     CommentDto,
@@ -91,9 +92,9 @@ export class WorknestApiClient {
         return response.data;
     }
 
-    // Users
-    async getUsers(): Promise<UserDto[]> {
-        const response = await this.client.get<UserDto[]>('/api/users');
+    // Users — list returns minimal projection (no email)
+    async getUsers(): Promise<PublicUserDto[]> {
+        const response = await this.client.get<PublicUserDto[]>('/api/users');
         return response.data;
     }
 

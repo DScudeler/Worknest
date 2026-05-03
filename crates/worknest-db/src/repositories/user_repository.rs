@@ -1,9 +1,8 @@
 //! User repository implementation
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension, Row};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use worknest_core::models::{User, UserId};
 
@@ -110,20 +109,25 @@ impl UserRepository {
         Ok(user.clone())
     }
 
-    /// Update password hash for a user
+    /// Update password hash for a user. Also bumps `password_changed_at` to
+    /// the current Unix timestamp so any JWT minted before now (with an
+    /// older `iat` claim) is rejected by the auth layer.
     pub fn update_password(&self, user_id: UserId, password_hash: &str) -> Result<()> {
         let conn = self
             .pool
             .get()
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
+        let now = Utc::now();
         let rows_affected = conn
             .execute(
-                "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE users SET password_hash = ?1, password_changed_at = ?2, updated_at = ?3 \
+                 WHERE id = ?4",
                 params![
                     password_hash,
-                    Utc::now().to_rfc3339(),
-                    user_id.0.to_string()
+                    now.timestamp(),
+                    now.to_rfc3339(),
+                    user_id.0.to_string(),
                 ],
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -133,6 +137,27 @@ impl UserRepository {
         }
 
         Ok(())
+    }
+
+    /// Look up the Unix-epoch second when this user's password was last
+    /// changed. Returns 0 for users that haven't rotated since the column
+    /// was added.
+    pub fn get_password_changed_at(&self, user_id: UserId) -> Result<i64> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let mut stmt = conn
+            .prepare("SELECT password_changed_at FROM users WHERE id = ?1")
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let ts: Option<i64> = stmt
+            .query_row(params![user_id.0.to_string()], |row| row.get(0))
+            .optional()
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        ts.ok_or_else(|| DbError::NotFound("User not found".to_string()))
     }
 }
 
@@ -231,20 +256,18 @@ impl Repository<User, UserId> for UserRepository {
     }
 }
 
+use super::{parse_datetime, parse_uuid};
+
 /// Convert a database row to a User
 fn row_to_user(row: &Row) -> rusqlite::Result<User> {
     let id_str: String = row.get(0)?;
-    let id = UserId::from_uuid(Uuid::parse_str(&id_str).unwrap());
+    let id = UserId::from_uuid(parse_uuid(&id_str)?);
 
     let created_at_str: String = row.get(3)?;
-    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let created_at = parse_datetime(&created_at_str)?;
 
     let updated_at_str: String = row.get(4)?;
-    let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let updated_at = parse_datetime(&updated_at_str)?;
 
     Ok(User {
         id,

@@ -25,6 +25,11 @@ pub struct SettingsScreen {
     current_password: String,
     new_password: String,
     confirm_password: String,
+    /// Snapshot of `AppState::password_change_seq` from last render. When the
+    /// global counter advances, the password change succeeded and we clear
+    /// the input fields. Letting the change succeed-path drive this prevents
+    /// the previous bug where fields were cleared even on failure.
+    last_password_change_seq: u64,
     // Application tab fields
     selected_theme: ThemeOption,
 }
@@ -44,6 +49,7 @@ impl Default for SettingsScreen {
             current_password: String::new(),
             new_password: String::new(),
             confirm_password: String::new(),
+            last_password_change_seq: 0,
             selected_theme: ThemeOption::Dark,
         }
     }
@@ -61,6 +67,15 @@ impl SettingsScreen {
                 self.edit_username = user.username.clone();
                 self.edit_email = user.email.clone();
             }
+        }
+
+        // Clear password inputs once the API confirms the change. On failure
+        // the counter doesn't advance and the user keeps what they typed.
+        if state.password_change_seq != self.last_password_change_seq {
+            self.current_password.clear();
+            self.new_password.clear();
+            self.confirm_password.clear();
+            self.last_password_change_seq = state.password_change_seq;
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -156,7 +171,10 @@ impl SettingsScreen {
 
                 ui.add_space(Spacing::MEDIUM);
 
-                if ui.button("Save Profile").clicked() {
+                if ui
+                    .add_enabled(!state.is_loading, egui::Button::new("Save Profile"))
+                    .clicked()
+                {
                     self.save_profile(state);
                 }
             });
@@ -198,7 +216,8 @@ impl SettingsScreen {
 
                 ui.add_space(Spacing::MEDIUM);
 
-                let can_change_password = !self.current_password.is_empty()
+                let can_change_password = !state.is_loading
+                    && !self.current_password.is_empty()
                     && !self.new_password.is_empty()
                     && !self.confirm_password.is_empty()
                     && self.new_password == self.confirm_password;
@@ -344,8 +363,46 @@ impl SettingsScreen {
     }
 
     fn save_profile(&mut self, state: &mut AppState) {
-        // API integration coming soon
-        state.notify_info("Profile update API integration coming soon".to_string());
+        let username = if self.edit_username.is_empty() {
+            None
+        } else {
+            Some(self.edit_username.clone())
+        };
+        let email = if self.edit_email.is_empty() {
+            None
+        } else {
+            Some(self.edit_email.clone())
+        };
+
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
+        let token = match &state.auth_token {
+            Some(t) => t.clone(),
+            None => {
+                state.notify_error("Not authenticated".to_string());
+                return;
+            },
+        };
+
+        state.is_loading = true;
+
+        wasm_bindgen_futures::spawn_local(async move {
+            use crate::api_client::UpdateUserRequest;
+            use crate::events::AppEvent;
+
+            let request = UpdateUserRequest { username, email };
+
+            match api_client.update_current_user(&token, request).await {
+                Ok(user) => {
+                    event_queue.push(AppEvent::ProfileUpdated { user });
+                },
+                Err(e) => {
+                    event_queue.push(AppEvent::ProfileUpdateError {
+                        message: e.to_string(),
+                    });
+                },
+            }
+        });
     }
 
     fn change_password(&mut self, state: &mut AppState) {
@@ -359,7 +416,42 @@ impl SettingsScreen {
             return;
         }
 
-        // API integration coming soon
-        state.notify_info("Password change API integration coming soon".to_string());
+        let old_password = self.current_password.clone();
+        let new_password = self.new_password.clone();
+
+        let api_client = state.api_client.clone();
+        let event_queue = state.event_queue.clone();
+        let token = match &state.auth_token {
+            Some(t) => t.clone(),
+            None => {
+                state.notify_error("Not authenticated".to_string());
+                return;
+            },
+        };
+
+        // Don't clear inputs synchronously — the change might still fail. The
+        // render loop clears them when `password_change_seq` advances.
+        state.is_loading = true;
+
+        wasm_bindgen_futures::spawn_local(async move {
+            use crate::api_client::ChangePasswordRequest;
+            use crate::events::AppEvent;
+
+            let request = ChangePasswordRequest {
+                old_password,
+                new_password,
+            };
+
+            match api_client.change_password(&token, request).await {
+                Ok(_) => {
+                    event_queue.push(AppEvent::PasswordChanged);
+                },
+                Err(e) => {
+                    event_queue.push(AppEvent::PasswordChangeError {
+                        message: e.to_string(),
+                    });
+                },
+            }
+        });
     }
 }

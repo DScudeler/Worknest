@@ -8,6 +8,7 @@ use super::{project::ProjectId, user::UserId};
 
 /// Ticket identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct TicketId(pub Uuid);
 
 impl TicketId {

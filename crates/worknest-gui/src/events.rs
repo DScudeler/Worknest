@@ -48,6 +48,14 @@ pub enum AppEvent {
     RegisterSuccess { user: User, token: String },
     RegisterError { message: String },
 
+    // Account management events — fired only after the API confirms success,
+    // so screens can show success notifications and clear sensitive form
+    // state without racing the network.
+    ProfileUpdated { user: User },
+    ProfileUpdateError { message: String },
+    PasswordChanged,
+    PasswordChangeError { message: String },
+
     // Project events
     ProjectsLoaded { projects: Vec<Project> },
     ProjectLoaded { project: Project },

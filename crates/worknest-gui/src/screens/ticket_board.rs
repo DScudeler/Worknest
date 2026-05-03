@@ -415,7 +415,7 @@ impl TicketBoardScreen {
                 status: Some(status_str),
                 priority: None,
                 ticket_type: None,
-                assigned_to: None,
+                assignee_id: None,
             };
 
             match api_client.update_ticket(&token, ticket_id.0, request).await {
@@ -440,16 +440,7 @@ impl TicketBoardScreen {
     }
 
     fn load_tickets(&mut self, state: &AppState) {
-        if false {
-            // Demo mode: Load from in-memory state
-            self.tickets = state
-                .tickets
-                .iter()
-                .filter(|t| t.project_id == self.project_id)
-                .cloned()
-                .collect();
-        } else {
-            // Integrated mode: Load from API
+        {
             let api_client = state.api_client.clone();
             let event_queue = state.event_queue.clone();
             let token = match &state.auth_token {

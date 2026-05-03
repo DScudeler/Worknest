@@ -230,17 +230,47 @@ impl ProjectListScreen {
                 project_id: project.id,
             });
         } else if archive_clicked {
-            // Update project archived status via API
-            if let Some(p) = state.projects.iter_mut().find(|p| p.id == project.id) {
-                p.archived = !p.archived;
-                let msg = if p.archived {
-                    "Project archived"
-                } else {
-                    "Project unarchived"
-                };
-                state.notify_success(msg.to_string());
-                // TODO: Call API to update project archived status
-                self.load_projects(state);
+            let api_client = state.api_client.clone();
+            let event_queue = state.event_queue.clone();
+            let project_id = project.id;
+            let project_id_uuid = project.id.0;
+            let was_archived = project.archived;
+            let original_project = project.clone();
+
+            if let Some(token) = &state.auth_token {
+                let token = token.clone();
+
+                // Optimistic toggle.
+                if let Some(p) = state.projects.iter_mut().find(|p| p.id == project_id) {
+                    p.archived = !p.archived;
+                }
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::events::AppEvent;
+
+                    let result = if was_archived {
+                        api_client.unarchive_project(&token, project_id_uuid).await
+                    } else {
+                        api_client.archive_project(&token, project_id_uuid).await
+                    };
+
+                    match result {
+                        Ok(updated_project) => {
+                            event_queue.push(AppEvent::ProjectUpdated {
+                                project: updated_project,
+                            });
+                        },
+                        Err(e) => {
+                            // Revert the optimistic flip so UI matches server.
+                            event_queue.push(AppEvent::ProjectUpdated {
+                                project: original_project,
+                            });
+                            event_queue.push(AppEvent::ProjectError {
+                                message: e.to_string(),
+                            });
+                        },
+                    }
+                });
             }
         } else if card_response.clicked() {
             // Only navigate if no button was clicked
@@ -253,7 +283,17 @@ impl ProjectListScreen {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.set_min_width(400.0);
+                ui.set_min_width(
+                    (ctx.input(|i| {
+                        i.raw.screen_rect.unwrap_or(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::Vec2::new(800.0, 600.0),
+                        ))
+                    })
+                    .width()
+                        * 0.6)
+                        .clamp(300.0, 600.0),
+                );
 
                 ui.label("Project Name");
                 ui.add(
