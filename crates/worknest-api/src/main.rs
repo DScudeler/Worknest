@@ -23,12 +23,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use rate_limit::RateLimiter;
 use worknest_auth::AuthService;
 use worknest_core::models::{
-    Attachment, AttachmentId, Comment, CommentId, Priority, Project, ProjectId, Ticket, TicketId,
-    TicketStatus, TicketType, User, UserId,
+    Attachment, AttachmentId, Comment, CommentId, Priority, Project, ProjectId, Tag, TagId, Ticket,
+    TicketId, TicketStatus, TicketType, User, UserId,
 };
 use worknest_db::{
     init_pool, run_migrations, AttachmentRepository, CommentRepository, DbError, ProjectRepository,
-    Repository, TicketFilters, TicketRepository, TicketSort, UserRepository,
+    Repository, TagRepository, TicketFilters, TicketRepository, TicketSort, UserRepository,
 };
 
 /// Maximum file upload size (10 MB)
@@ -43,6 +43,7 @@ struct AppState {
     ticket_repo: Arc<TicketRepository>,
     comment_repo: Arc<CommentRepository>,
     attachment_repo: Arc<AttachmentRepository>,
+    tag_repo: Arc<TagRepository>,
     rate_limiter: RateLimiter,
 }
 
@@ -321,6 +322,7 @@ async fn main() {
     let ticket_repo = Arc::new(TicketRepository::new(Arc::clone(&pool)));
     let comment_repo = Arc::new(CommentRepository::new(Arc::clone(&pool)));
     let attachment_repo = Arc::new(AttachmentRepository::new(Arc::clone(&pool)));
+    let tag_repo = Arc::new(TagRepository::new(Arc::clone(&pool)));
     let auth_service = Arc::new(AuthService::new(
         Arc::clone(&user_repo),
         secret_key,
@@ -340,6 +342,7 @@ async fn main() {
         ticket_repo,
         comment_repo,
         attachment_repo,
+        tag_repo,
         rate_limiter,
     };
 
@@ -398,6 +401,9 @@ async fn main() {
             "/api/tickets/{id}",
             get(get_ticket).put(update_ticket).delete(delete_ticket),
         )
+        // Tags (categorical labels). Read-only for now; admins manage the
+        // catalogue via DB seed (V5 migration). Phase 7+ may surface CRUD.
+        .route("/api/tags", get(list_tags))
         // Comments
         .route(
             "/api/tickets/{ticket_id}/comments",
@@ -930,11 +936,73 @@ async fn remove_project_member(
 // Ticket Routes
 // ============================================================================
 
+/// Wire-format ticket: the inner `Ticket` plus its tag set. Older clients
+/// that don't know about tags ignore the extra field (serde Deserialize on
+/// `Ticket` is permissive by default), so this is additive.
+#[derive(Debug, Serialize)]
+struct TicketResponse {
+    #[serde(flatten)]
+    ticket: Ticket,
+    tags: Vec<Tag>,
+}
+
+impl TicketResponse {
+    fn new(ticket: Ticket, tags: Vec<Tag>) -> Self {
+        Self { ticket, tags }
+    }
+}
+
+/// Enrich a single ticket with its tags. One DB hop.
+async fn enrich_ticket(state: &AppState, ticket: Ticket) -> Result<TicketResponse, AppError> {
+    let trepo = state.tag_repo.clone();
+    let id = ticket.id;
+    let tags = db(move || trepo.list_for_ticket(id)).await?;
+    Ok(TicketResponse::new(ticket, tags))
+}
+
+/// Enrich many tickets with their tags. Single batched DB hop.
+async fn enrich_tickets(
+    state: &AppState,
+    tickets: Vec<Ticket>,
+) -> Result<Vec<TicketResponse>, AppError> {
+    if tickets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: Vec<TicketId> = tickets.iter().map(|t| t.id).collect();
+    let trepo = state.tag_repo.clone();
+    let mut by_ticket = db(move || trepo.list_for_tickets(&ids)).await?;
+    Ok(tickets
+        .into_iter()
+        .map(|t| {
+            let tags = by_ticket.remove(&t.id).unwrap_or_default();
+            TicketResponse::new(t, tags)
+        })
+        .collect())
+}
+
+/// Parse a list of TagId strings, surfacing the first invalid one as 400.
+fn parse_tag_ids(raw: &[String]) -> Result<Vec<TagId>, AppError> {
+    raw.iter()
+        .map(|s| {
+            TagId::from_string(s).map_err(|_| AppError::BadRequest(format!("Invalid tag id: {s}")))
+        })
+        .collect()
+}
+
+async fn list_tags(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Tag>>, AppError> {
+    let repo = state.tag_repo.clone();
+    let tags = db(move || repo.list_all()).await?;
+    Ok(Json(tags))
+}
+
 async fn list_tickets(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<Vec<Ticket>>, AppError> {
+) -> Result<Json<Vec<TicketResponse>>, AppError> {
     // Filters and authorization push into SQL via TicketFilters.
     let mut filters = TicketFilters {
         caller_id: Some(user.id),
@@ -985,20 +1053,21 @@ async fn list_tickets(
 
     let repo = state.ticket_repo.clone();
     let tickets = db(move || repo.find_with_filters(&filters)).await?;
-
-    Ok(Json(tickets))
+    let enriched = enrich_tickets(&state, tickets).await?;
+    Ok(Json(enriched))
 }
 
 async fn get_ticket(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<Ticket>, AppError> {
+) -> Result<Json<TicketResponse>, AppError> {
     let ticket_id = TicketId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid ticket ID".to_string()))?;
 
     let (ticket, _project) = load_ticket_for_access(&state, user.id, ticket_id).await?;
-    Ok(Json(ticket))
+    let response = enrich_ticket(&state, ticket).await?;
+    Ok(Json(response))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1008,13 +1077,17 @@ struct CreateTicketRequest {
     description: Option<String>,
     ticket_type: String,
     priority: Option<String>,
+    /// Optional tag set. Sent as TagId strings; an unknown id rejects the
+    /// whole create with 400 so the ticket and its tags stay consistent.
+    #[serde(default)]
+    tag_ids: Vec<String>,
 }
 
 async fn create_ticket(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
     Json(req): Json<CreateTicketRequest>,
-) -> Result<Json<Ticket>, AppError> {
+) -> Result<Json<TicketResponse>, AppError> {
     // Input validation
     if req.title.len() > 500 {
         return Err(AppError::BadRequest(
@@ -1061,9 +1134,26 @@ async fn create_ticket(
         .validate()
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
+    // Validate tag ids before we touch tickets — surfaces 400 with a
+    // useful message instead of orphaning a created ticket on a bad tag.
+    let tag_ids = parse_tag_ids(&req.tag_ids)?;
+    let trepo_check = state.tag_repo.clone();
+    let tag_ids_check = tag_ids.clone();
+    db(move || trepo_check.verify_exists(&tag_ids_check)).await?;
+
     let repo = state.ticket_repo.clone();
     let created_ticket = db(move || repo.create(&ticket)).await?;
-    Ok(Json(created_ticket))
+
+    // Attach tags (best effort; if this fails we surface the error and the
+    // ticket stays present without tags — caller can retry update).
+    if !tag_ids.is_empty() {
+        let trepo = state.tag_repo.clone();
+        let tid = created_ticket.id;
+        db(move || trepo.set_for_ticket(tid, &tag_ids)).await?;
+    }
+
+    let response = enrich_ticket(&state, created_ticket).await?;
+    Ok(Json(response))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1074,6 +1164,9 @@ struct UpdateTicketRequest {
     priority: Option<String>,
     ticket_type: Option<String>,
     assignee_id: Option<String>,
+    /// If present, replaces the ticket's full tag set with this list.
+    /// Absent means "leave tags untouched"; an empty array means "clear".
+    tag_ids: Option<Vec<String>>,
 }
 
 async fn update_ticket(
@@ -1167,8 +1260,25 @@ async fn update_ticket(
         .validate()
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
+    // Tag set replacement (validated up front so we don't half-apply).
+    let tag_ids_opt = if let Some(raw) = req.tag_ids.as_ref() {
+        let parsed = parse_tag_ids(raw)?;
+        let trepo_check = state.tag_repo.clone();
+        let parsed_check = parsed.clone();
+        db(move || trepo_check.verify_exists(&parsed_check)).await?;
+        Some(parsed)
+    } else {
+        None
+    };
+
     let repo = state.ticket_repo.clone();
     let updated_ticket = db(move || repo.update(&ticket)).await?;
+
+    if let Some(tag_ids) = tag_ids_opt {
+        let trepo = state.tag_repo.clone();
+        let tid = updated_ticket.id;
+        db(move || trepo.set_for_ticket(tid, &tag_ids)).await?;
+    }
 
     // Return ETag with the new updated_at so clients can chain CAS updates.
     let etag = updated_ticket.updated_at.to_rfc3339();
@@ -1176,7 +1286,8 @@ async fn update_ticket(
     if let Ok(v) = HeaderValue::from_str(&etag) {
         headers_out.insert("etag", v);
     }
-    Ok((headers_out, Json(updated_ticket)).into_response())
+    let response = enrich_ticket(&state, updated_ticket).await?;
+    Ok((headers_out, Json(response)).into_response())
 }
 
 async fn delete_ticket(
@@ -1199,7 +1310,7 @@ async fn search_tickets(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<Vec<Ticket>>, AppError> {
+) -> Result<Json<Vec<TicketResponse>>, AppError> {
     let query = params
         .get("q")
         .ok_or_else(|| AppError::BadRequest("Missing 'q' query parameter".to_string()))?;
@@ -1236,7 +1347,8 @@ async fn search_tickets(
         })
         .collect();
 
-    Ok(Json(visible))
+    let enriched = enrich_tickets(&state, visible).await?;
+    Ok(Json(enriched))
 }
 
 // ============================================================================

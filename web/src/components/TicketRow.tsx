@@ -2,6 +2,7 @@ import type { Ticket } from "../lib/types";
 import { StatusPill } from "./StatusPill";
 import { PriorityBadge } from "./PriorityBadge";
 import { Avatar } from "./Avatar";
+import { TagList } from "./Tag";
 
 interface Props {
   ticket: Ticket;
@@ -36,7 +37,14 @@ export function TicketRow({ ticket, shortId, assigneeName, onClick }: Props) {
     >
       <span className="id">{shortId}</span>
       <span className="title" title={ticket.title}>
-        {ticket.title}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {ticket.title}
+        </span>
+        {ticket.tags.length > 0 && (
+          <span className="tags">
+            <TagList tags={ticket.tags} max={3} />
+          </span>
+        )}
       </span>
       <StatusPill status={ticket.status} />
       <PriorityBadge priority={ticket.priority} />

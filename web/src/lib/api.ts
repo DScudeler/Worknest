@@ -17,6 +17,7 @@ import type {
   ProjectMember,
   PublicUser,
   RegisterRequest,
+  Tag,
   Ticket,
   TicketId,
   UpdateProjectRequest,
@@ -173,6 +174,12 @@ export const ticketsApi = {
       headers: ifMatch ? { "If-Match": ifMatch } : {},
     }),
   remove: (id: TicketId) => request<void>(`/tickets/${id}`, { method: "DELETE" }),
+};
+
+// Tags ---------------------------------------------------------------------
+
+export const tagsApi = {
+  list: () => request<Tag[]>("/tags"),
 };
 
 // Comments -----------------------------------------------------------------

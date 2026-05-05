@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import type { PublicUser, Ticket, TicketStatus } from "../lib/types";
 import { PriorityBadge } from "./PriorityBadge";
 import { Avatar } from "./Avatar";
+import { TagList } from "./Tag";
 
 interface Column {
   status: TicketStatus;
@@ -78,6 +79,11 @@ export function KanbanBoard({ tickets, shortId, users, onTicketClick, onAddTicke
                 >
                   <div className="bc-id">{shortId(t.id)}</div>
                   <div className="bc-title">{t.title}</div>
+                  {t.tags.length > 0 && (
+                    <div className="bc-tags" style={{ marginBottom: 8 }}>
+                      <TagList tags={t.tags} max={3} />
+                    </div>
+                  )}
                   <div className="bc-meta">
                     <PriorityBadge priority={t.priority} />
                     {assignee ? (

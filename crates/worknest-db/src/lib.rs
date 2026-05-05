@@ -14,7 +14,7 @@ pub use connection::{init_memory_pool, init_pool, DbConnection, DbPool};
 pub use error::{DbError, Result};
 pub use migrations::run_migrations;
 pub use repositories::{
-    AttachmentRepository, CommentRepository, ProjectRepository, TicketFilters, TicketRepository,
-    TicketSort, UserRepository,
+    AttachmentRepository, CommentRepository, ProjectRepository, TagRepository, TicketFilters,
+    TicketRepository, TicketSort, UserRepository,
 };
 pub use repository::Repository;

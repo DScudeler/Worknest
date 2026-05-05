@@ -6,14 +6,16 @@ import {
   attachmentsApi,
   commentsApi,
   projectsApi,
+  tagsApi,
   ticketsApi,
   usersApi,
 } from "../lib/api";
-import type { Priority, TicketStatus, TicketType } from "../lib/types";
+import type { Priority, TagId, TicketStatus, TicketType } from "../lib/types";
 import { priorityLabel, statusLabel } from "../lib/types";
 import { Avatar } from "./Avatar";
 import { StatusPill } from "./StatusPill";
 import { PriorityBadge } from "./PriorityBadge";
+import { TagChip } from "./Tag";
 import { useAuth } from "../state/auth";
 
 interface Props {
@@ -41,6 +43,7 @@ export function TicketSheet({ ticketId, onClose }: Props) {
     queryFn: () => attachmentsApi.listForTicket(ticketId),
   });
   const usersQ = useQuery({ queryKey: ["users"], queryFn: () => usersApi.list() });
+  const tagsQ = useQuery({ queryKey: ["tags"], queryFn: () => tagsApi.list() });
 
   const ticket = ticketQ.data;
   const projectId = ticket?.project_id;
@@ -61,7 +64,13 @@ export function TicketSheet({ ticketId, onClose }: Props) {
   );
 
   const updateMut = useMutation({
-    mutationFn: async (patch: { status?: TicketStatus; priority?: Priority; type?: TicketType; assignee_id?: string | "" }) => {
+    mutationFn: async (patch: {
+      status?: TicketStatus;
+      priority?: Priority;
+      type?: TicketType;
+      assignee_id?: string | "";
+      tag_ids?: TagId[];
+    }) => {
       if (!ticket) throw new Error("No ticket");
       return ticketsApi.update(
         ticket.id,
@@ -70,6 +79,7 @@ export function TicketSheet({ ticketId, onClose }: Props) {
           ...(patch.priority !== undefined && { priority: patch.priority }),
           ...(patch.type !== undefined && { ticket_type: patch.type }),
           ...(patch.assignee_id !== undefined && { assignee_id: patch.assignee_id }),
+          ...(patch.tag_ids !== undefined && { tag_ids: patch.tag_ids }),
         },
         ticket.updated_at,
       );
@@ -307,6 +317,36 @@ export function TicketSheet({ ticketId, onClose }: Props) {
             </Prop>
             <Prop label="Project">
               <span style={{ fontSize: 12.5 }}>{projectQ.data.name}</span>
+            </Prop>
+            <Prop label="Tags">
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {(tagsQ.data ?? []).map((t) => {
+                  const on = ticket.tags.some((x) => x.id === t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        const next = on
+                          ? ticket.tags.filter((x) => x.id !== t.id).map((x) => x.id)
+                          : [...ticket.tags.map((x) => x.id), t.id];
+                        updateMut.mutate({ tag_ids: next });
+                      }}
+                      style={{
+                        padding: 0,
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        opacity: on ? 1 : 0.4,
+                        borderRadius: 6,
+                      }}
+                      aria-pressed={on}
+                    >
+                      <TagChip tag={t} />
+                    </button>
+                  );
+                })}
+              </div>
             </Prop>
           </div>
         </div>

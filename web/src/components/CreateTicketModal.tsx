@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { Modal } from "./Modal";
-import { ApiError, projectsApi, ticketsApi, usersApi } from "../lib/api";
-import type { Priority, ProjectId, TicketType } from "../lib/types";
+import { ApiError, projectsApi, tagsApi, ticketsApi, usersApi } from "../lib/api";
+import type { Priority, ProjectId, TagId, TicketType } from "../lib/types";
+import { TagChip } from "./Tag";
 
 interface Props {
   open: boolean;
@@ -33,6 +34,7 @@ export function CreateTicketModal({ open, onClose, projectId, projectName }: Pro
   const [type, setType] = useState<TicketType>("Task");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [assigneeId, setAssigneeId] = useState<string>("");
+  const [selectedTags, setSelectedTags] = useState<Set<TagId>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const { data: members = [] } = useQuery({
@@ -43,6 +45,11 @@ export function CreateTicketModal({ open, onClose, projectId, projectName }: Pro
   const { data: people = [] } = useQuery({
     queryKey: ["users"],
     queryFn: () => usersApi.list(),
+    enabled: open,
+  });
+  const { data: tags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => tagsApi.list(),
     enabled: open,
   });
 
@@ -57,6 +64,7 @@ export function CreateTicketModal({ open, onClose, projectId, projectName }: Pro
       setType("Task");
       setPriority("Medium");
       setAssigneeId("");
+      setSelectedTags(new Set());
       setError(null);
     }
   }, [open]);
@@ -69,8 +77,8 @@ export function CreateTicketModal({ open, onClose, projectId, projectName }: Pro
         description: description || undefined,
         ticket_type: type,
         priority,
+        tag_ids: Array.from(selectedTags),
       });
-      // Phase 6 will let us send tag_ids in the same call.
       if (assigneeId) {
         await ticketsApi.update(ticket.id, { assignee_id: assigneeId });
       }
@@ -153,6 +161,41 @@ export function CreateTicketModal({ open, onClose, projectId, projectName }: Pro
                 <option key={u.id} value={u.id}>{u.username}</option>
               ))}
             </select>
+          </div>
+        </div>
+        <div>
+          <label className="field-label">Tags</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {tags.map((t) => {
+              const on = selectedTags.has(t.id);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    const next = new Set(selectedTags);
+                    if (on) next.delete(t.id);
+                    else next.add(t.id);
+                    setSelectedTags(next);
+                  }}
+                  style={{
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    opacity: on ? 1 : 0.45,
+                    boxShadow: on ? `inset 0 0 0 2px ${t.color_fg}` : "none",
+                    borderRadius: 6,
+                  }}
+                  aria-pressed={on}
+                >
+                  <TagChip tag={t} />
+                </button>
+              );
+            })}
+            {tags.length === 0 ? (
+              <span className="muted">No tags configured.</span>
+            ) : null}
           </div>
         </div>
       </div>

@@ -44,6 +44,16 @@ export const TICKET_TYPES: TicketType[] = ["Task", "Bug", "Feature", "Epic"];
 export const TICKET_STATUSES: TicketStatus[] = ["Open", "InProgress", "Review", "Done", "Closed"];
 export const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Critical"];
 
+export type TagId = string;
+
+export interface Tag {
+  id: TagId;
+  name: string;
+  color_bg: string;
+  color_fg: string;
+  created_at: string;
+}
+
 export interface Ticket {
   id: TicketId;
   project_id: ProjectId;
@@ -58,6 +68,9 @@ export interface Ticket {
   estimate_hours: number | null;
   created_at: string;
   updated_at: string;
+  /// Empty array when the ticket has no tags. The backend always populates
+  /// this field on every Ticket response (since V5).
+  tags: Tag[];
 }
 
 export interface Comment {
@@ -118,6 +131,7 @@ export interface CreateTicketRequest {
   description?: string;
   ticket_type: TicketType;
   priority?: Priority;
+  tag_ids?: TagId[];
 }
 
 export interface UpdateTicketRequest {
@@ -127,6 +141,7 @@ export interface UpdateTicketRequest {
   priority?: Priority;
   ticket_type?: TicketType;
   assignee_id?: UserId | "";
+  tag_ids?: TagId[];
 }
 
 export interface AddMemberRequest {
@@ -134,8 +149,16 @@ export interface AddMemberRequest {
   role?: string;
 }
 
-// UI-only: tag system to be replaced by Phase 6 backend tags.
+// CSS class hint for tag chips. Returns the design-language slug only when the
+// backend tag matches a known palette; otherwise the chip falls back to the
+// neutral surface-3 styling.
 export type TagSlug = "bug" | "feature" | "design" | "research" | "docs" | "chore";
+const KNOWN_TAG_SLUGS: TagSlug[] = ["bug", "feature", "design", "research", "docs", "chore"];
+
+export function tagSlug(tag: { name: string }): TagSlug | null {
+  const candidate = tag.name.toLowerCase();
+  return KNOWN_TAG_SLUGS.includes(candidate as TagSlug) ? (candidate as TagSlug) : null;
+}
 
 // Display helpers — collapse 5 backend statuses to 4 design statuses (review→
 // progress, closed→blocked treatment) for color/spacing.
