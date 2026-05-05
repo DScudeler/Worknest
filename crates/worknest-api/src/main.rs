@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{ConnectInfo, DefaultBodyLimit, Multipart, Path, Request, State},
-    http::{header, HeaderValue, Method, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -82,21 +82,31 @@ where
 // Authorization helpers
 // ============================================================================
 
-/// Whether `user_id` may read or modify a project. Currently project owner only;
-/// when team membership lands this rule expands.
-fn project_visible_to(user_id: UserId, project: &Project) -> bool {
-    project.created_by == user_id
+/// Whether `user_id` may read a project, given an already-fetched
+/// `is_member` flag. Owner always passes; members pass for read + comment +
+/// claim flows. Project-mutation routes additionally require ownership and
+/// must not rely on this helper alone.
+fn project_visible_to(user_id: UserId, project: &Project, is_member: bool) -> bool {
+    project.created_by == user_id || is_member
 }
 
-/// Whether `user_id` may read or modify a ticket: ticket creator, assignee, or
-/// project owner.
-fn ticket_visible_to(user_id: UserId, ticket: &Ticket, project: Option<&Project>) -> bool {
+/// Whether `user_id` may read or interact with a ticket: ticket creator,
+/// assignee, project owner, or any project member.
+fn ticket_visible_to(
+    user_id: UserId,
+    ticket: &Ticket,
+    project: Option<&Project>,
+    is_member: bool,
+) -> bool {
     ticket.created_by == user_id
         || ticket.assignee_id == Some(user_id)
         || project.is_some_and(|p| p.created_by == user_id)
+        || is_member
 }
 
-/// Load a project and verify the caller may access it.
+/// Load a project and verify the caller may access it. Membership is
+/// resolved against `project_members` so workers added to a project (by the
+/// owner) can read it without owning it.
 async fn load_project_for_access(
     state: &AppState,
     user_id: UserId,
@@ -107,7 +117,10 @@ async fn load_project_for_access(
         .await?
         .ok_or_else(|| AppError::NotFound("Project not found".to_string()))?;
 
-    if !project_visible_to(user_id, &project) {
+    let mrepo = state.project_repo.clone();
+    let is_member = db(move || mrepo.is_member(project_id, user_id)).await?;
+
+    if !project_visible_to(user_id, &project, is_member) {
         return Err(AppError::Forbidden);
     }
     Ok(project)
@@ -130,10 +143,32 @@ async fn load_ticket_for_access(
     let pid = ticket.project_id;
     let project = db(move || prepo.find_by_id(pid)).await?;
 
-    if !ticket_visible_to(user_id, &ticket, project.as_ref()) {
+    let mrepo = state.project_repo.clone();
+    let is_member = db(move || mrepo.is_member(pid, user_id)).await?;
+
+    if !ticket_visible_to(user_id, &ticket, project.as_ref(), is_member) {
         return Err(AppError::Forbidden);
     }
     Ok((ticket, project))
+}
+
+/// Stricter check for project-mutation routes (update, delete, archive, and
+/// member management). Membership alone is not sufficient — caller must
+/// own the project.
+async fn load_project_for_owner(
+    state: &AppState,
+    user_id: UserId,
+    project_id: ProjectId,
+) -> Result<Project, AppError> {
+    let repo = state.project_repo.clone();
+    let project = db(move || repo.find_by_id(project_id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Project not found".to_string()))?;
+
+    if project.created_by != user_id {
+        return Err(AppError::Forbidden);
+    }
+    Ok(project)
 }
 
 // ============================================================================
@@ -347,6 +382,15 @@ async fn main() {
             get(get_project).put(update_project).delete(delete_project),
         )
         .route("/api/projects/{id}/archive", post(archive_project))
+        // Project membership: any member can list, only owner can add/remove.
+        .route(
+            "/api/projects/{id}/members",
+            get(list_project_members).post(add_project_member),
+        )
+        .route(
+            "/api/projects/{id}/members/{user_id}",
+            axum::routing::delete(remove_project_member),
+        )
         // Tickets
         .route("/api/tickets", get(list_tickets).post(create_ticket))
         .route("/api/tickets/search", get(search_tickets))
@@ -636,12 +680,8 @@ async fn list_projects(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Project>>, AppError> {
     let repo = state.project_repo.clone();
-    let projects = db(move || repo.find_all()).await?;
-
-    let visible: Vec<Project> = projects
-        .into_iter()
-        .filter(|p| project_visible_to(user.id, p))
-        .collect();
+    let uid = user.id;
+    let visible = db(move || repo.find_visible_to(uid)).await?;
     Ok(Json(visible))
 }
 
@@ -691,7 +731,16 @@ async fn create_project(
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let repo = state.project_repo.clone();
-    let created_project = db(move || repo.create(&project)).await?;
+    let creator = user.id;
+    let project_id = project.id;
+    let created_project = db(move || {
+        let p = repo.create(&project)?;
+        // Seed owner-as-member so the visibility "owner OR member" union has
+        // a uniform shape; matches the V4 backfill for existing projects.
+        repo.add_member(project_id, creator, "owner")?;
+        Ok::<_, DbError>(p)
+    })
+    .await?;
     Ok(Json(created_project))
 }
 
@@ -714,7 +763,7 @@ async fn update_project(
     let project_id = ProjectId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
 
-    let mut project = load_project_for_access(&state, user.id, project_id).await?;
+    let mut project = load_project_for_owner(&state, user.id, project_id).await?;
 
     // Update fields if provided
     if let Some(name) = req.name {
@@ -754,7 +803,7 @@ async fn delete_project(
     let project_id = ProjectId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
 
-    load_project_for_access(&state, user.id, project_id).await?;
+    load_project_for_owner(&state, user.id, project_id).await?;
 
     let repo = state.project_repo.clone();
     db(move || repo.delete(project_id)).await?;
@@ -770,12 +819,111 @@ async fn archive_project(
     let project_id = ProjectId::from_string(&id)
         .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
 
-    load_project_for_access(&state, user.id, project_id).await?;
+    load_project_for_owner(&state, user.id, project_id).await?;
 
     let repo = state.project_repo.clone();
     let archived_project = db(move || repo.archive(project_id)).await?;
 
     Ok(Json(archived_project))
+}
+
+// ============================================================================
+// Project Member Routes
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct AddMemberRequest {
+    user_id: String,
+    /// Optional role label; defaults to "member". The owner is auto-recorded
+    /// as role="owner" by `create_project`. The role string is informational
+    /// today — visibility checks treat any membership row as read-access.
+    role: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ProjectMember {
+    user_id: String,
+    role: String,
+}
+
+async fn list_project_members(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<ProjectMember>>, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+
+    // Any member (including owner) can read the membership roster.
+    load_project_for_access(&state, user.id, project_id).await?;
+
+    let repo = state.project_repo.clone();
+    let members = db(move || repo.list_members(project_id)).await?;
+
+    Ok(Json(
+        members
+            .into_iter()
+            .map(|(uid, role)| ProjectMember {
+                user_id: uid.0.to_string(),
+                role,
+            })
+            .collect(),
+    ))
+}
+
+async fn add_project_member(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<AddMemberRequest>,
+) -> Result<Json<ProjectMember>, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+    let target_uid = UserId::from_string(&req.user_id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+
+    // Only the project owner may add members.
+    load_project_for_owner(&state, user.id, project_id).await?;
+
+    // Verify the user exists so we don't silently create dangling rows.
+    let urepo = state.user_repo.clone();
+    let exists = db(move || urepo.find_by_id(target_uid)).await?;
+    if exists.is_none() {
+        return Err(AppError::NotFound("User not found".to_string()));
+    }
+
+    let role = req.role.unwrap_or_else(|| "member".to_string());
+    let role_for_db = role.clone();
+    let prepo = state.project_repo.clone();
+    db(move || prepo.add_member(project_id, target_uid, &role_for_db)).await?;
+
+    Ok(Json(ProjectMember {
+        user_id: target_uid.0.to_string(),
+        role,
+    }))
+}
+
+async fn remove_project_member(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path((id, user_id)): Path<(String, String)>,
+) -> Result<StatusCode, AppError> {
+    let project_id = ProjectId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".to_string()))?;
+    let target_uid = UserId::from_string(&user_id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+
+    // Only the project owner may remove members. Removing the owner is a
+    // no-op for visibility (owner remains visible via `created_by`) but the
+    // row is deleted as requested.
+    load_project_for_owner(&state, user.id, project_id).await?;
+
+    let repo = state.project_repo.clone();
+    let removed = db(move || repo.remove_member(project_id, target_uid)).await?;
+    if !removed {
+        return Err(AppError::NotFound("Member not found".to_string()));
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ============================================================================
@@ -932,8 +1080,9 @@ async fn update_ticket(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdateTicketRequest>,
-) -> Result<Json<Ticket>, AppError> {
+) -> Result<Response, AppError> {
     // Input validation
     if let Some(ref title) = req.title {
         if title.len() > 500 {
@@ -955,6 +1104,18 @@ async fn update_ticket(
 
     let (mut ticket, _project) = load_ticket_for_access(&state, user.id, ticket_id).await?;
 
+    // Optimistic concurrency: If-Match must match current updated_at.
+    if let Some(if_match) = headers.get("if-match").and_then(|v| v.to_str().ok()) {
+        let provided = chrono::DateTime::parse_from_rfc3339(if_match.trim().trim_matches('"'))
+            .map_err(|_| AppError::BadRequest(
+                "Invalid If-Match (expected RFC3339 timestamp)".to_string(),
+            ))?;
+        if provided.timestamp_millis() != ticket.updated_at.timestamp_millis() {
+            return Err(AppError::PreconditionFailed(
+                "Ticket modified since GET".to_string(),
+            ));
+        }
+    }
     // Update fields if provided
     if let Some(title) = req.title {
         ticket.title = title;
@@ -1008,7 +1169,14 @@ async fn update_ticket(
 
     let repo = state.ticket_repo.clone();
     let updated_ticket = db(move || repo.update(&ticket)).await?;
-    Ok(Json(updated_ticket))
+
+    // Return ETag with the new updated_at so clients can chain CAS updates.
+    let etag = updated_ticket.updated_at.to_rfc3339();
+    let mut headers_out = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(&etag) {
+        headers_out.insert("etag", v);
+    }
+    Ok((headers_out, Json(updated_ticket)).into_response())
 }
 
 async fn delete_ticket(
@@ -1476,6 +1644,7 @@ enum AppError {
     BadRequest(String),
     Unauthorized(String),
     Forbidden,
+    PreconditionFailed(String),
     NotFound(String),
     TooManyRequests,
     Internal(String),
@@ -1494,6 +1663,7 @@ impl IntoResponse for AppError {
                 StatusCode::FORBIDDEN,
                 "You do not have permission to perform this action".to_string(),
             ),
+            AppError::PreconditionFailed(msg) => (StatusCode::PRECONDITION_FAILED, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::TooManyRequests => (
                 StatusCode::TOO_MANY_REQUESTS,

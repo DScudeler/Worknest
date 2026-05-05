@@ -111,6 +111,132 @@ impl ProjectRepository {
             .ok_or_else(|| DbError::NotFound("Project not found after archive".to_string()))
     }
 
+    /// Add a user as a member of a project. Idempotent: re-inserting an
+    /// existing (project, user) pair refreshes the role and `added_at`.
+    pub fn add_member(&self, project_id: ProjectId, user_id: UserId, role: &str) -> Result<()> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        conn.execute(
+            "INSERT INTO project_members (project_id, user_id, role, added_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(project_id, user_id) DO UPDATE SET
+                role = excluded.role,
+                added_at = excluded.added_at",
+            params![
+                project_id.0.to_string(),
+                user_id.0.to_string(),
+                role,
+                Utc::now().to_rfc3339(),
+            ],
+        )
+        .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Whether `user_id` is a member of `project_id` (any role, including
+    /// implicit owner-as-member rows backfilled by V4).
+    pub fn is_member(&self, project_id: ProjectId, user_id: UserId) -> Result<bool> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_members
+                 WHERE project_id = ?1 AND user_id = ?2",
+                params![project_id.0.to_string(), user_id.0.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(count > 0)
+    }
+
+    /// List all (user_id, role) pairs for a project, ordered by added_at.
+    pub fn list_members(&self, project_id: ProjectId) -> Result<Vec<(UserId, String)>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT user_id, role FROM project_members
+                 WHERE project_id = ?1 ORDER BY added_at",
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![project_id.0.to_string()], |row| {
+                let uid_str: String = row.get(0)?;
+                let role: String = row.get(1)?;
+                Ok((uid_str, role))
+            })
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            let (uid_str, role) = r.map_err(|e| DbError::Query(e.to_string()))?;
+            let uid = UserId::from_uuid(parse_uuid(&uid_str).map_err(|e| {
+                DbError::Query(format!("invalid user id in project_members: {e}"))
+            })?);
+            out.push((uid, role));
+        }
+        Ok(out)
+    }
+
+    /// Remove a member from a project. Returns true if a row was deleted.
+    pub fn remove_member(&self, project_id: ProjectId, user_id: UserId) -> Result<bool> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let rows = conn
+            .execute(
+                "DELETE FROM project_members
+                 WHERE project_id = ?1 AND user_id = ?2",
+                params![project_id.0.to_string(), user_id.0.to_string()],
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(rows > 0)
+    }
+
+    /// Find every project visible to `user_id`: those they own (`created_by`)
+    /// OR those they are a member of. Replaces the previous in-memory filter
+    /// in `list_projects`.
+    pub fn find_visible_to(&self, user_id: UserId) -> Result<Vec<Project>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT p.id, p.name, p.description, p.color, p.archived,
+                                 p.created_by, p.created_at, p.updated_at
+                 FROM projects p
+                 LEFT JOIN project_members pm ON pm.project_id = p.id
+                 WHERE p.created_by = ?1 OR pm.user_id = ?1
+                 ORDER BY p.name",
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let projects = stmt
+            .query_map(params![user_id.0.to_string()], row_to_project)
+            .map_err(|e| DbError::Query(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(projects)
+    }
+
     /// Unarchive a project
     pub fn unarchive(&self, project_id: ProjectId) -> Result<()> {
         let conn = self

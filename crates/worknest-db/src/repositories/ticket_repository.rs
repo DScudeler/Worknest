@@ -261,15 +261,19 @@ impl TicketRepository {
 
         if let Some(caller) = f.caller_id {
             // visibility: ticket creator OR assignee OR owner of parent project
+            // OR explicit member of parent project (`project_members`).
             let n1 = params_vec.len() + 1;
             params_vec.push(Box::new(caller.0.to_string()));
             let n2 = params_vec.len() + 1;
             params_vec.push(Box::new(caller.0.to_string()));
             let n3 = params_vec.len() + 1;
             params_vec.push(Box::new(caller.0.to_string()));
+            let n4 = params_vec.len() + 1;
+            params_vec.push(Box::new(caller.0.to_string()));
             clauses.push(format!(
                 "(t.created_by = ?{n1} OR t.assignee_id = ?{n2} \
-                  OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.created_by = ?{n3}))"
+                  OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.created_by = ?{n3}) \
+                  OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = t.project_id AND pm.user_id = ?{n4}))"
             ));
         }
         if let Some(project_id) = f.project_id {
