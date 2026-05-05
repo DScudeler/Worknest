@@ -81,10 +81,7 @@ impl TagRepository {
     /// Batch-load tags for many tickets in a single query. Returns a map
     /// keyed by `TicketId`; tickets with no tags are simply absent from
     /// the map (callers should default to an empty Vec).
-    pub fn list_for_tickets(
-        &self,
-        ticket_ids: &[TicketId],
-    ) -> Result<HashMap<TicketId, Vec<Tag>>> {
+    pub fn list_for_tickets(&self, ticket_ids: &[TicketId]) -> Result<HashMap<TicketId, Vec<Tag>>> {
         let mut out: HashMap<TicketId, Vec<Tag>> = HashMap::new();
         if ticket_ids.is_empty() {
             return Ok(out);

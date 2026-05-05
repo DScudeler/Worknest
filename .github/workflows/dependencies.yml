@@ -44,7 +44,6 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly
-          targets: wasm32-unknown-unknown
 
       - name: Cache cargo tools
         uses: actions/cache@v4
@@ -57,8 +56,5 @@ jobs:
       - name: Install cargo-udeps
         run: cargo install cargo-udeps --locked
 
-      - name: Check for unused dependencies (backend crates)
-        run: cargo +nightly udeps --workspace --exclude worknest-gui
-
-      - name: Check for unused dependencies (web app)
-        run: cargo +nightly udeps -p worknest-gui --target wasm32-unknown-unknown
+      - name: Check for unused dependencies
+        run: cargo +nightly udeps --workspace

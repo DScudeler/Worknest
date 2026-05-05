@@ -182,9 +182,10 @@ impl ProjectRepository {
         let mut out = Vec::new();
         for r in rows {
             let (uid_str, role) = r.map_err(|e| DbError::Query(e.to_string()))?;
-            let uid = UserId::from_uuid(parse_uuid(&uid_str).map_err(|e| {
-                DbError::Query(format!("invalid user id in project_members: {e}"))
-            })?);
+            let uid =
+                UserId::from_uuid(parse_uuid(&uid_str).map_err(|e| {
+                    DbError::Query(format!("invalid user id in project_members: {e}"))
+                })?);
             out.push((uid, role));
         }
         Ok(out)

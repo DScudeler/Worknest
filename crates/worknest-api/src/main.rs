@@ -1087,12 +1087,8 @@ async fn get_stats(
     // ISO week window: Monday 00:00 UTC of this week to next Monday 00:00 UTC.
     let now = chrono::Utc::now();
     let weekday = now.date_naive().weekday().num_days_from_monday() as i64;
-    let week_start = now
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_utc()
-        - chrono::Duration::days(weekday);
+    let week_start =
+        now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc() - chrono::Duration::days(weekday);
     let week_end = week_start + chrono::Duration::days(7);
 
     let mut open_tickets = 0usize;
@@ -1322,9 +1318,9 @@ async fn update_ticket(
     // Optimistic concurrency: If-Match must match current updated_at.
     if let Some(if_match) = headers.get("if-match").and_then(|v| v.to_str().ok()) {
         let provided = chrono::DateTime::parse_from_rfc3339(if_match.trim().trim_matches('"'))
-            .map_err(|_| AppError::BadRequest(
-                "Invalid If-Match (expected RFC3339 timestamp)".to_string(),
-            ))?;
+            .map_err(|_| {
+                AppError::BadRequest("Invalid If-Match (expected RFC3339 timestamp)".to_string())
+            })?;
         if provided.timestamp_millis() != ticket.updated_at.timestamp_millis() {
             return Err(AppError::PreconditionFailed(
                 "Ticket modified since GET".to_string(),
