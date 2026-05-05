@@ -16,6 +16,7 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -404,6 +405,9 @@ async fn main() {
         // Tags (categorical labels). Read-only for now; admins manage the
         // catalogue via DB seed (V5 migration). Phase 7+ may surface CRUD.
         .route("/api/tags", get(list_tags))
+        // Dashboard stats: aggregate counts the home screen wants on first
+        // paint (open tickets, assigned-to-me, due-this-week, active projects).
+        .route("/api/stats", get(get_stats))
         // Comments
         .route(
             "/api/tickets/{ticket_id}/comments",
@@ -620,6 +624,10 @@ async fn get_current_user(AuthUser(user): AuthUser) -> Result<Json<User>, AppErr
 struct UpdateUserRequest {
     username: Option<String>,
     email: Option<String>,
+    /// Display name. Empty string clears the field; absent leaves it.
+    full_name: Option<String>,
+    /// Avatar URL. Empty string clears the field; absent leaves it.
+    avatar_url: Option<String>,
 }
 
 async fn update_current_user(
@@ -636,6 +644,32 @@ async fn update_current_user(
     if let Some(email) = req.email {
         validate_email(&email)?;
         updated_user.email = email;
+    }
+    if let Some(full_name) = req.full_name {
+        let trimmed = full_name.trim();
+        if trimmed.len() > 100 {
+            return Err(AppError::BadRequest(
+                "Full name must be at most 100 characters".to_string(),
+            ));
+        }
+        updated_user.full_name = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(avatar_url) = req.avatar_url {
+        let trimmed = avatar_url.trim();
+        if trimmed.len() > 2048 {
+            return Err(AppError::BadRequest(
+                "Avatar URL must be at most 2048 characters".to_string(),
+            ));
+        }
+        updated_user.avatar_url = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
     }
 
     updated_user
@@ -996,6 +1030,94 @@ async fn list_tags(
     let repo = state.tag_repo.clone();
     let tags = db(move || repo.list_all()).await?;
     Ok(Json(tags))
+}
+
+#[derive(Debug, Serialize)]
+struct DashboardStats {
+    /// Tickets in any visible project still in `Open` status.
+    open_tickets: usize,
+    /// Tickets currently assigned to the caller (any status).
+    assigned_to_me: usize,
+    /// My tickets with `due_date` falling in the current ISO week.
+    due_this_week: usize,
+    /// Non-archived projects the caller can see.
+    active_projects: usize,
+}
+
+async fn get_stats(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<DashboardStats>, AppError> {
+    // Projects the caller owns or is a member of, non-archived only.
+    let project_repo = state.project_repo.clone();
+    let user_id = user.id;
+    let visible_projects = db(move || project_repo.find_all())
+        .await?
+        .into_iter()
+        .filter(|p| !p.archived)
+        .collect::<Vec<_>>();
+
+    // Re-check each project for membership; the helper short-circuits when
+    // the caller owns it. We still need an explicit check for non-owner
+    // members.
+    let mrepo = state.project_repo.clone();
+    let mut active_projects = 0usize;
+    for p in &visible_projects {
+        let pid = p.id;
+        let owns = p.created_by == user_id;
+        let is_member = if owns {
+            true
+        } else {
+            let r = mrepo.clone();
+            db(move || r.is_member(pid, user_id)).await?
+        };
+        if is_member {
+            active_projects += 1;
+        }
+    }
+
+    // All tickets the caller can see, with the existing visibility filter.
+    let trepo = state.ticket_repo.clone();
+    let filters = TicketFilters {
+        caller_id: Some(user.id),
+        ..TicketFilters::default()
+    };
+    let visible_tickets = db(move || trepo.find_with_filters(&filters)).await?;
+
+    // ISO week window: Monday 00:00 UTC of this week to next Monday 00:00 UTC.
+    let now = chrono::Utc::now();
+    let weekday = now.date_naive().weekday().num_days_from_monday() as i64;
+    let week_start = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+        - chrono::Duration::days(weekday);
+    let week_end = week_start + chrono::Duration::days(7);
+
+    let mut open_tickets = 0usize;
+    let mut assigned_to_me = 0usize;
+    let mut due_this_week = 0usize;
+    for t in &visible_tickets {
+        if matches!(t.status, TicketStatus::Open) {
+            open_tickets += 1;
+        }
+        if t.assignee_id == Some(user_id) {
+            assigned_to_me += 1;
+            if let Some(due) = t.due_date {
+                if due >= week_start && due < week_end {
+                    due_this_week += 1;
+                }
+            }
+        }
+    }
+
+    Ok(Json(DashboardStats {
+        open_tickets,
+        assigned_to_me,
+        due_this_week,
+        active_projects,
+    }))
 }
 
 async fn list_tickets(

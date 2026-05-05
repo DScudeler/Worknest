@@ -160,6 +160,13 @@ export function TicketSheet({ ticketId, onClose }: Props) {
         <div className="sheet-body">
           <div className="sheet-main">
             <h1>{ticket.title}</h1>
+            {ticket.tags.length > 0 && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16 }}>
+                {ticket.tags.map((tag) => (
+                  <TagChip key={tag.id} tag={tag} />
+                ))}
+              </div>
+            )}
             <div className="desc">
               {ticket.description?.trim() || (
                 <span className="muted">No description yet.</span>

@@ -1,8 +1,8 @@
-import { useMemo } from "react";
 import { Plus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { projectsApi, ticketsApi } from "../lib/api";
+import { projectsApi, statsApi } from "../lib/api";
+import { displayName } from "../lib/types";
 import { useAuth } from "../state/auth";
 import { ProjectCard } from "../components/ProjectCard";
 
@@ -18,15 +18,6 @@ function greeting(): string {
   return "Good evening,";
 }
 
-function startOfWeek(): Date {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = (day + 6) % 7; // Monday-start
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - diff);
-  return d;
-}
-
 export function DashboardScreen({ onCreateProject }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -34,41 +25,22 @@ export function DashboardScreen({ onCreateProject }: Props) {
     queryKey: ["projects"],
     queryFn: () => projectsApi.list(),
   });
-  // Pull tickets assigned to me to derive stats. Phase 7 swaps this for /api/stats.
-  const { data: myTickets = [] } = useQuery({
-    queryKey: ["tickets", { assignee_id: "me" }],
-    queryFn: () => ticketsApi.list({ assignee_id: "me" }),
-  });
-  const { data: openTickets = [] } = useQuery({
-    queryKey: ["tickets", { status: "open" }],
-    queryFn: () => ticketsApi.list({ status: "open" }),
+  const { data: stats } = useQuery({
+    queryKey: ["stats"],
+    queryFn: () => statsApi.get(),
   });
 
   const activeProjects = projects.filter((p) => !p.archived);
-
-  const stats = useMemo(() => {
-    const weekStart = startOfWeek();
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const dueThisWeek = myTickets.filter((t) => {
-      if (!t.due_date) return false;
-      const d = new Date(t.due_date);
-      return d >= weekStart && d < weekEnd;
-    }).length;
-    return {
-      open: openTickets.length,
-      mine: myTickets.length,
-      dueThisWeek,
-      activeProjects: activeProjects.length,
-    };
-  }, [myTickets, openTickets, activeProjects]);
 
   return (
     <div>
       <div className="page-head">
         <div>
           <h1>
-            {greeting()} <span className="greet-accent">{user?.username ?? "there"}</span>
+            {greeting()}{" "}
+            <span className="greet-accent">
+              {user ? displayName(user) : "there"}
+            </span>
           </h1>
           <p className="sub">
             {new Date().toLocaleDateString(undefined, {
@@ -76,8 +48,9 @@ export function DashboardScreen({ onCreateProject }: Props) {
               month: "long",
               day: "numeric",
             })}
-            {" · "}
-            {stats.mine} ticket{stats.mine === 1 ? "" : "s"} assigned to you.
+            {stats
+              ? ` · ${stats.assigned_to_me} ticket${stats.assigned_to_me === 1 ? "" : "s"} assigned to you.`
+              : ""}
           </p>
         </div>
         <button type="button" className="btn primary" onClick={onCreateProject}>
@@ -86,10 +59,10 @@ export function DashboardScreen({ onCreateProject }: Props) {
       </div>
 
       <div className="stat-row">
-        <StatCard label="Open tickets" value={stats.open} />
-        <StatCard label="Assigned to me" value={stats.mine} />
-        <StatCard label="Due this week" value={stats.dueThisWeek} />
-        <StatCard label="Active projects" value={stats.activeProjects} />
+        <StatCard label="Open tickets" value={stats?.open_tickets ?? 0} />
+        <StatCard label="Assigned to me" value={stats?.assigned_to_me ?? 0} />
+        <StatCard label="Due this week" value={stats?.due_this_week ?? 0} />
+        <StatCard label="Active projects" value={stats?.active_projects ?? 0} />
       </div>
 
       <div className="section-row">

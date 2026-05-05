@@ -28,7 +28,7 @@ impl UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, created_at, updated_at FROM users WHERE username = ?1",
+                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE username = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -49,7 +49,7 @@ impl UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, created_at, updated_at FROM users WHERE email = ?1",
+                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE email = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -169,7 +169,7 @@ impl Repository<User, UserId> for UserRepository {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         let mut stmt = conn
-            .prepare("SELECT id, username, email, created_at, updated_at FROM users WHERE id = ?1")
+            .prepare("SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE id = ?1")
             .map_err(|e| DbError::Query(e.to_string()))?;
 
         let user = stmt
@@ -188,7 +188,7 @@ impl Repository<User, UserId> for UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, created_at, updated_at FROM users ORDER BY username",
+                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users ORDER BY username",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -215,10 +215,13 @@ impl Repository<User, UserId> for UserRepository {
 
         let rows_affected = conn
             .execute(
-                "UPDATE users SET username = ?1, email = ?2, updated_at = ?3 WHERE id = ?4",
+                "UPDATE users SET username = ?1, email = ?2, full_name = ?3, \
+                 avatar_url = ?4, updated_at = ?5 WHERE id = ?6",
                 params![
                     entity.username,
                     entity.email,
+                    entity.full_name,
+                    entity.avatar_url,
                     Utc::now().to_rfc3339(),
                     entity.id.0.to_string(),
                 ],
@@ -258,21 +261,24 @@ impl Repository<User, UserId> for UserRepository {
 
 use super::{parse_datetime, parse_uuid};
 
-/// Convert a database row to a User
+/// Convert a database row to a User. Column order:
+/// (id, username, email, full_name, avatar_url, created_at, updated_at)
 fn row_to_user(row: &Row) -> rusqlite::Result<User> {
     let id_str: String = row.get(0)?;
     let id = UserId::from_uuid(parse_uuid(&id_str)?);
 
-    let created_at_str: String = row.get(3)?;
+    let created_at_str: String = row.get(5)?;
     let created_at = parse_datetime(&created_at_str)?;
 
-    let updated_at_str: String = row.get(4)?;
+    let updated_at_str: String = row.get(6)?;
     let updated_at = parse_datetime(&updated_at_str)?;
 
     Ok(User {
         id,
         username: row.get(1)?,
         email: row.get(2)?,
+        full_name: row.get(3)?,
+        avatar_url: row.get(4)?,
         created_at,
         updated_at,
     })

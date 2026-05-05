@@ -11,6 +11,7 @@ import type {
   Comment,
   CreateProjectRequest,
   CreateTicketRequest,
+  DashboardStats,
   LoginRequest,
   Project,
   ProjectId,
@@ -113,10 +114,18 @@ export const authApi = {
 export const usersApi = {
   me: () => request<User>("/users/me"),
   list: () => request<PublicUser[]>("/users"),
-  updateMe: (data: { username?: string; email?: string }) =>
-    request<User>("/users/me", { method: "PUT", body: data }),
+  updateMe: (data: {
+    username?: string;
+    email?: string;
+    full_name?: string;
+    avatar_url?: string;
+  }) => request<User>("/users/me", { method: "PUT", body: data }),
   changePassword: (data: { old_password: string; new_password: string }) =>
     request<void>("/users/me/password", { method: "POST", body: data }),
+};
+
+export const statsApi = {
+  get: () => request<DashboardStats>("/stats"),
 };
 
 // Projects -----------------------------------------------------------------

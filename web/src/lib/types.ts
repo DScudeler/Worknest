@@ -16,6 +16,8 @@ export interface User {
   id: UserId;
   username: string;
   email: string;
+  full_name: string | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +25,19 @@ export interface User {
 export interface PublicUser {
   id: UserId;
   username: string;
+}
+
+export interface DashboardStats {
+  open_tickets: number;
+  assigned_to_me: number;
+  due_this_week: number;
+  active_projects: number;
+}
+
+/// Display name for a user — prefers the optional full_name, falls back to
+/// the unique username.
+export function displayName(user: { full_name?: string | null; username: string }): string {
+  return user.full_name?.trim() ? user.full_name : user.username;
 }
 
 export interface Project {

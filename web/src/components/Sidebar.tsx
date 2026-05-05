@@ -79,7 +79,12 @@ export function Sidebar({ onCreateProject }: Props) {
         <span className="spacer" />
         {user ? (
           <>
-            <Avatar id={user.id} name={user.username} size="sm" />
+            <Avatar
+              id={user.id}
+              name={user.full_name?.trim() || user.username}
+              avatarUrl={user.avatar_url}
+              size="sm"
+            />
             <button
               type="button"
               className="theme-toggle"
