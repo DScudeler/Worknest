@@ -1,0 +1,82 @@
+/* Worknest design tokens — ported from docs/design/Worknest_new-UI.zip */
+:root {
+  --accent-50: #eef0ff;
+  --accent-100: #dde1ff;
+  --accent-200: #c1c7ff;
+  --accent-300: #9aa3ff;
+  --accent-400: #7a82f0;
+  --accent-500: #5b5fc7;
+  --accent-600: #4a4eb0;
+  --accent-700: #3c3f95;
+  --accent-800: #2f3175;
+
+  --status-open: #6b7280;
+  --status-progress: #f59e0b;
+  --status-done: #10b981;
+  --status-blocked: #ef4444;
+
+  --pri-low: #94a3b8;
+  --pri-med: #3b82f6;
+  --pri-high: #f59e0b;
+  --pri-urgent: #ef4444;
+
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #faf9f6;
+  --surface-3: #f1efeb;
+  --border: #e7e3dc;
+  --border-strong: #d8d3ca;
+  --text: #1c1b1a;
+  --text-2: #54514c;
+  --text-3: #8a857d;
+  --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.04), 0 1px 3px rgba(28, 27, 26, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 27, 26, 0.06), 0 2px 4px rgba(28, 27, 26, 0.04);
+  --shadow-lg: 0 16px 40px rgba(28, 27, 26, 0.10), 0 4px 12px rgba(28, 27, 26, 0.05);
+
+  --proj-1: #fde68a;
+  --proj-2: #c4b5fd;
+  --proj-3: #a7f3d0;
+  --proj-4: #fbcfe8;
+  --proj-5: #bae6fd;
+  --proj-6: #fed7aa;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --font: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Geist", "Inter", -apple-system, system-ui, sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg: #14141a;
+  --surface: #1c1c24;
+  --surface-2: #232330;
+  --surface-3: #2a2a38;
+  --border: #2e2e3c;
+  --border-strong: #3a3a4d;
+  --text: #f1efeb;
+  --text-2: #b4b1a9;
+  --text-3: #7d7a72;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  --accent-500: #7a82f0;
+  --accent-600: #6b73e3;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea, select { font-family: inherit; color: inherit; }
+a { color: inherit; }
