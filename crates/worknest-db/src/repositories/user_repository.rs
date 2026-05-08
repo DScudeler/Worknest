@@ -28,7 +28,7 @@ impl UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE username = ?1",
+                "SELECT id, username, email, full_name, avatar_url, is_agent, created_at, updated_at FROM users WHERE username = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -49,7 +49,7 @@ impl UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE email = ?1",
+                "SELECT id, username, email, full_name, avatar_url, is_agent, created_at, updated_at FROM users WHERE email = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -88,11 +88,14 @@ impl UserRepository {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         conn.execute(
-            "INSERT INTO users (id, username, email, password_hash, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO users (id, username, email, full_name, avatar_url, is_agent, password_hash, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 user.id.0.to_string(),
                 user.username,
                 user.email,
+                user.full_name,
+                user.avatar_url,
+                if user.is_agent { 1_i64 } else { 0_i64 },
                 password_hash,
                 user.created_at.to_rfc3339(),
                 user.updated_at.to_rfc3339(),
@@ -107,6 +110,21 @@ impl UserRepository {
         })?;
 
         Ok(user.clone())
+    }
+
+    /// Look up an existing autonomous-agent user by its deterministic email.
+    /// Returns `Ok(None)` when the email is unknown, `Err(ConstraintViolation)`
+    /// when a *human* user happens to own that address — the activation
+    /// pipeline turns that into a clear error instead of silently reusing a
+    /// human identity.
+    pub fn find_agent_by_email(&self, email: &str) -> Result<Option<User>> {
+        match self.find_by_email(email)? {
+            None => Ok(None),
+            Some(u) if u.is_agent => Ok(Some(u)),
+            Some(_) => Err(DbError::ConstraintViolation(format!(
+                "Email {email} is already taken by a human user"
+            ))),
+        }
     }
 
     /// Update password hash for a user. Also bumps `password_changed_at` to
@@ -169,7 +187,7 @@ impl Repository<User, UserId> for UserRepository {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         let mut stmt = conn
-            .prepare("SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users WHERE id = ?1")
+            .prepare("SELECT id, username, email, full_name, avatar_url, is_agent, created_at, updated_at FROM users WHERE id = ?1")
             .map_err(|e| DbError::Query(e.to_string()))?;
 
         let user = stmt
@@ -188,7 +206,7 @@ impl Repository<User, UserId> for UserRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, email, full_name, avatar_url, created_at, updated_at FROM users ORDER BY username",
+                "SELECT id, username, email, full_name, avatar_url, is_agent, created_at, updated_at FROM users ORDER BY username",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
 
@@ -262,15 +280,17 @@ impl Repository<User, UserId> for UserRepository {
 use super::{parse_datetime, parse_uuid};
 
 /// Convert a database row to a User. Column order:
-/// (id, username, email, full_name, avatar_url, created_at, updated_at)
+/// (id, username, email, full_name, avatar_url, is_agent, created_at, updated_at)
 fn row_to_user(row: &Row) -> rusqlite::Result<User> {
     let id_str: String = row.get(0)?;
     let id = UserId::from_uuid(parse_uuid(&id_str)?);
 
-    let created_at_str: String = row.get(5)?;
+    let is_agent_int: i64 = row.get(5)?;
+
+    let created_at_str: String = row.get(6)?;
     let created_at = parse_datetime(&created_at_str)?;
 
-    let updated_at_str: String = row.get(6)?;
+    let updated_at_str: String = row.get(7)?;
     let updated_at = parse_datetime(&updated_at_str)?;
 
     Ok(User {
@@ -279,6 +299,7 @@ fn row_to_user(row: &Row) -> rusqlite::Result<User> {
         email: row.get(2)?,
         full_name: row.get(3)?,
         avatar_url: row.get(4)?,
+        is_agent: is_agent_int != 0,
         created_at,
         updated_at,
     })

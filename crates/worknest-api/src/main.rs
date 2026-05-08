@@ -2,6 +2,7 @@
 //!
 //! Online-first API server for web and optionally desktop clients.
 
+mod agents;
 mod rate_limit;
 
 use std::net::SocketAddr;
@@ -24,13 +25,18 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use rate_limit::RateLimiter;
 use worknest_auth::AuthService;
 use worknest_core::models::{
-    Attachment, AttachmentId, Comment, CommentId, Priority, Project, ProjectId, Tag, TagId, Ticket,
-    TicketId, TicketStatus, TicketType, User, UserId,
+    ActivationStep, AgentDeployment, AgentDeploymentId, AgentEvent, AgentStatus, AgentTick,
+    Attachment, AttachmentId, Capability, Comment, CommentId, Persona, PersonaId, Priority,
+    Project, ProjectId, Tag, TagId, Ticket, TicketId, TicketStatus, TicketType, User, UserId,
 };
 use worknest_db::{
-    init_pool, run_migrations, AttachmentRepository, CommentRepository, DbError, ProjectRepository,
-    Repository, TagRepository, TicketFilters, TicketRepository, TicketSort, UserRepository,
+    init_pool, run_migrations, AgentDeploymentRepository, AgentEventRepository,
+    AgentTickRepository, AttachmentRepository, CommentRepository, DbError, PersonaRepository,
+    ProjectRepository, Repository, TagRepository, TicketFilters, TicketRepository, TicketSort,
+    UserRepository,
 };
+
+use crate::agents::{AgentsConfig, SharedAgentsConfig};
 
 /// Maximum file upload size (10 MB)
 const MAX_UPLOAD_SIZE: usize = 10 * 1024 * 1024;
@@ -45,6 +51,11 @@ struct AppState {
     comment_repo: Arc<CommentRepository>,
     attachment_repo: Arc<AttachmentRepository>,
     tag_repo: Arc<TagRepository>,
+    persona_repo: Arc<PersonaRepository>,
+    deployment_repo: Arc<AgentDeploymentRepository>,
+    tick_repo: Arc<AgentTickRepository>,
+    event_repo: Arc<AgentEventRepository>,
+    agents_config: SharedAgentsConfig,
     rate_limiter: RateLimiter,
 }
 
@@ -324,10 +335,14 @@ async fn main() {
     let comment_repo = Arc::new(CommentRepository::new(Arc::clone(&pool)));
     let attachment_repo = Arc::new(AttachmentRepository::new(Arc::clone(&pool)));
     let tag_repo = Arc::new(TagRepository::new(Arc::clone(&pool)));
+    let persona_repo = Arc::new(PersonaRepository::new(Arc::clone(&pool)));
+    let deployment_repo = Arc::new(AgentDeploymentRepository::new(Arc::clone(&pool)));
+    let tick_repo = Arc::new(AgentTickRepository::new(Arc::clone(&pool)));
+    let event_repo = Arc::new(AgentEventRepository::new(Arc::clone(&pool)));
     let auth_service = Arc::new(AuthService::new(
         Arc::clone(&user_repo),
         secret_key,
-        Some(24), // 24 hour token expiration
+        Some(24 * 30), // 30-day token; agent JWTs need to outlive the default 24h
     ));
 
     // Rate limiter: 10 requests per minute per IP
@@ -335,6 +350,13 @@ async fn main() {
 
     // Repos hold their own Arc<DbPool>; we don't need to retain another reference.
     drop(pool);
+
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3000);
+    let agents_config = Arc::new(AgentsConfig::from_env(port));
+    agents::preflight_check(&agents_config);
 
     let state = AppState {
         auth_service,
@@ -344,6 +366,11 @@ async fn main() {
         comment_repo,
         attachment_repo,
         tag_repo,
+        persona_repo,
+        deployment_repo,
+        tick_repo,
+        event_repo,
+        agents_config,
         rate_limiter,
     };
 
@@ -430,6 +457,39 @@ async fn main() {
             "/api/attachments/{id}",
             get(download_attachment).delete(delete_attachment),
         )
+        // Personas (workspace-shared catalogue, like /api/tags)
+        .route("/api/personas", get(list_personas).post(create_persona))
+        .route(
+            "/api/personas/{id}",
+            get(get_persona).put(update_persona).delete(delete_persona),
+        )
+        // Agent deployments
+        .route(
+            "/api/projects/{pid}/agent-deployments",
+            get(list_project_deployments).post(deploy_persona),
+        )
+        .route(
+            "/api/agent-deployments/{id}",
+            get(get_deployment).delete(delete_deployment),
+        )
+        .route(
+            "/api/agent-deployments/{id}/suspend",
+            post(suspend_deployment),
+        )
+        .route(
+            "/api/agent-deployments/{id}/resume",
+            post(resume_deployment),
+        )
+        .route("/api/agent-deployments/{id}/retry", post(retry_deployment))
+        .route("/api/agent-deployments/{id}/stop", post(stop_deployment))
+        .route(
+            "/api/agent-deployments/{id}/ticks",
+            get(list_deployment_ticks),
+        )
+        .route(
+            "/api/agent-deployments/{id}/events",
+            get(list_deployment_events),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -453,12 +513,33 @@ async fn main() {
         }
     });
 
-    // Start server
-    let port = std::env::var("PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse()
-        .expect("PORT must be a number");
+    // Agents subsystem: one-shot recovery sweep then the cron tick loop.
+    let activation_state = agents::activation::ActivationState {
+        auth_service: state.auth_service.clone(),
+        user_repo: state.user_repo.clone(),
+        project_repo: state.project_repo.clone(),
+        persona_repo: state.persona_repo.clone(),
+        deployment_repo: state.deployment_repo.clone(),
+        event_repo: state.event_repo.clone(),
+        agents_config: state.agents_config.clone(),
+    };
+    let recovery_state = activation_state.clone();
+    tokio::spawn(async move { agents::activation::recover_stuck(recovery_state).await });
 
+    let executor: Arc<dyn agents::tick_executor::TickExecutor> =
+        Arc::new(agents::tick_executor::ClaudeCliExecutor {
+            claude_bin: state.agents_config.claude_bin.clone(),
+        });
+    let scheduler_state = agents::scheduler::SchedulerState {
+        deployment_repo: state.deployment_repo.clone(),
+        tick_repo: state.tick_repo.clone(),
+        event_repo: state.event_repo.clone(),
+        agents_config: state.agents_config.clone(),
+        executor,
+    };
+    tokio::spawn(async move { agents::scheduler::run_loop(scheduler_state).await });
+
+    // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("Starting server on {}", addr);
 
@@ -741,6 +822,12 @@ async fn get_project(
 struct CreateProjectRequest {
     name: String,
     description: Option<String>,
+    /// Optional source-repo location for the agents subsystem. Either an
+    /// absolute filesystem path to an existing local repo, or a clone URL
+    /// (`https://…`, `git@…`, `ssh://…`). Persisted as-is; validated only
+    /// at deployment time when a worktree is bootstrapped.
+    #[serde(default)]
+    repo_path: Option<String>,
 }
 
 async fn create_project(
@@ -764,6 +851,14 @@ async fn create_project(
 
     let mut project = Project::new(req.name, user.id);
     project.description = req.description;
+    project.repo_path = req.repo_path.and_then(|s| {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
 
     // Validate
     project
@@ -792,6 +887,9 @@ struct UpdateProjectRequest {
     /// from older clients via serde alias.
     #[serde(alias = "is_archived")]
     archived: Option<bool>,
+    /// Set/clear the project's source-repo location. Empty string clears.
+    #[serde(default)]
+    repo_path: Option<String>,
 }
 
 async fn update_project(
@@ -824,6 +922,14 @@ async fn update_project(
     }
     if let Some(archived) = req.archived {
         project.archived = archived;
+    }
+    if let Some(rp) = req.repo_path {
+        let trimmed = rp.trim().to_string();
+        project.repo_path = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
     }
 
     project
@@ -1199,6 +1305,15 @@ struct CreateTicketRequest {
     /// whole create with 400 so the ticket and its tags stay consistent.
     #[serde(default)]
     tag_ids: Vec<String>,
+    /// Optional parent ticket id, set when an Epic is decomposed into
+    /// subtasks via `wn_create_subtask`. Validated against existence + same
+    /// project to keep the tree consistent.
+    #[serde(default)]
+    parent_id: Option<String>,
+    /// Optional explicit assignee at create time. Used by the worknest-mcp
+    /// `wn_create_subtask` tool when the tech-lead farms work out.
+    #[serde(default)]
+    assignee_id: Option<String>,
 }
 
 async fn create_ticket(
@@ -1247,6 +1362,30 @@ async fn create_ticket(
         };
     }
 
+    if let Some(pid_str) = req.parent_id.as_ref() {
+        let pid = TicketId::from_string(pid_str)
+            .map_err(|_| AppError::BadRequest("Invalid parent_id".to_string()))?;
+        let trepo = state.ticket_repo.clone();
+        let parent = db(move || worknest_db::Repository::find_by_id(&*trepo, pid))
+            .await?
+            .ok_or_else(|| AppError::BadRequest("Parent ticket not found".to_string()))?;
+        if parent.project_id != ticket.project_id {
+            return Err(AppError::BadRequest(
+                "Parent ticket belongs to a different project".to_string(),
+            ));
+        }
+        ticket.parent_id = Some(pid);
+    }
+
+    if let Some(assignee_id_str) = req.assignee_id.as_ref() {
+        if !assignee_id_str.is_empty() {
+            ticket.assignee_id = Some(
+                UserId::from_string(assignee_id_str)
+                    .map_err(|_| AppError::BadRequest("Invalid assignee ID".to_string()))?,
+            );
+        }
+    }
+
     // Validate
     ticket
         .validate()
@@ -1285,6 +1424,8 @@ struct UpdateTicketRequest {
     /// If present, replaces the ticket's full tag set with this list.
     /// Absent means "leave tags untouched"; an empty array means "clear".
     tag_ids: Option<Vec<String>>,
+    /// If present, sets/clears the parent ticket id. Empty string clears.
+    parent_id: Option<String>,
 }
 
 async fn update_ticket(
@@ -1370,6 +1511,30 @@ async fn update_ticket(
                 UserId::from_string(&assignee_id_str)
                     .map_err(|_| AppError::BadRequest("Invalid assignee ID".to_string()))?,
             );
+        }
+    }
+
+    if let Some(pid_str) = req.parent_id {
+        if pid_str.is_empty() {
+            ticket.parent_id = None;
+        } else {
+            let pid = TicketId::from_string(&pid_str)
+                .map_err(|_| AppError::BadRequest("Invalid parent_id".to_string()))?;
+            if pid == ticket.id {
+                return Err(AppError::BadRequest(
+                    "Ticket cannot be its own parent".to_string(),
+                ));
+            }
+            let trepo = state.ticket_repo.clone();
+            let parent = db(move || worknest_db::Repository::find_by_id(&*trepo, pid))
+                .await?
+                .ok_or_else(|| AppError::BadRequest("Parent ticket not found".to_string()))?;
+            if parent.project_id != ticket.project_id {
+                return Err(AppError::BadRequest(
+                    "Parent ticket belongs to a different project".to_string(),
+                ));
+            }
+            ticket.parent_id = Some(pid);
         }
     }
 
@@ -1863,6 +2028,694 @@ fn validate_password_length(password: &str) -> Result<(), AppError> {
         ));
     }
     Ok(())
+}
+
+// ============================================================================
+// Personas + Agent Deployments (V7)
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct CreatePersonaRequest {
+    slug: String,
+    name: String,
+    emoji: String,
+    color: String,
+    description: String,
+    role: String,
+    tone: String,
+    expertise: Vec<String>,
+    instructions: String,
+    capabilities: Vec<String>,
+    model: String,
+    default_cron: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdatePersonaRequest {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    emoji: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    tone: Option<String>,
+    #[serde(default)]
+    expertise: Option<Vec<String>>,
+    #[serde(default)]
+    instructions: Option<String>,
+    #[serde(default)]
+    capabilities: Option<Vec<String>>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    default_cron: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeployPersonaRequest {
+    persona_id: PersonaId,
+    #[serde(default)]
+    cron_expression: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct AgentDeploymentResponse {
+    #[serde(flatten)]
+    deployment: AgentDeployment,
+    persona: Persona,
+}
+
+fn parse_capability(s: &str) -> Result<Capability, AppError> {
+    Ok(match s {
+        "Comment" => Capability::Comment,
+        "Label" => Capability::Label,
+        "Assign" => Capability::Assign,
+        "SetPriority" => Capability::SetPriority,
+        "SetStatus" => Capability::SetStatus,
+        "Attach" => Capability::Attach,
+        "CreateTicket" => Capability::CreateTicket,
+        "Close" => Capability::Close,
+        other => return Err(AppError::BadRequest(format!("Unknown capability: {other}"))),
+    })
+}
+
+fn parse_model(s: &str) -> Result<worknest_core::models::AgentModel, AppError> {
+    use worknest_core::models::AgentModel;
+    Ok(match s {
+        "Haiku" => AgentModel::Haiku,
+        "Sonnet" => AgentModel::Sonnet,
+        "Opus" => AgentModel::Opus,
+        other => return Err(AppError::BadRequest(format!("Unknown model: {other}"))),
+    })
+}
+
+fn validate_cron_5_field(expr: &str) -> Result<(), AppError> {
+    if expr.split_whitespace().count() != 5 {
+        return Err(AppError::BadRequest(
+            "cron expression must have exactly 5 whitespace-separated fields".into(),
+        ));
+    }
+    agents::activation::next_fire_after(expr, chrono::Utc::now())
+        .map(|_| ())
+        .map_err(|e| AppError::BadRequest(format!("invalid cron: {e}")))
+}
+
+async fn list_personas(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Persona>>, AppError> {
+    let repo = state.persona_repo.clone();
+    let rows = db(move || repo.list_all()).await?;
+    Ok(Json(rows))
+}
+
+async fn get_persona(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Persona>, AppError> {
+    let pid = PersonaId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid persona ID".into()))?;
+    let repo = state.persona_repo.clone();
+    let row = db(move || worknest_db::Repository::find_by_id(&*repo, pid))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Persona not found".into()))?;
+    Ok(Json(row))
+}
+
+async fn create_persona(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<CreatePersonaRequest>,
+) -> Result<(StatusCode, Json<Persona>), AppError> {
+    let now = chrono::Utc::now();
+    let capabilities = req
+        .capabilities
+        .iter()
+        .map(|s| parse_capability(s))
+        .collect::<Result<Vec<_>, _>>()?;
+    let model = parse_model(&req.model)?;
+    validate_cron_5_field(&req.default_cron)?;
+    let persona = Persona {
+        id: PersonaId::new(),
+        slug: req.slug,
+        name: req.name,
+        emoji: req.emoji,
+        color: req.color,
+        description: req.description,
+        role: req.role,
+        tone: req.tone,
+        expertise: req.expertise,
+        instructions: req.instructions,
+        capabilities,
+        model,
+        default_cron: req.default_cron,
+        created_at: now,
+        updated_at: now,
+    };
+    persona
+        .validate()
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let repo = state.persona_repo.clone();
+    let persona_for_create = persona.clone();
+    let saved = db(move || worknest_db::Repository::create(&*repo, &persona_for_create)).await?;
+    Ok((StatusCode::CREATED, Json(saved)))
+}
+
+async fn update_persona(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePersonaRequest>,
+) -> Result<Json<Persona>, AppError> {
+    let pid = PersonaId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid persona ID".into()))?;
+    let repo = state.persona_repo.clone();
+    let mut persona = db(move || worknest_db::Repository::find_by_id(&*repo, pid))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Persona not found".into()))?;
+    if let Some(v) = req.name {
+        persona.name = v;
+    }
+    if let Some(v) = req.emoji {
+        persona.emoji = v;
+    }
+    if let Some(v) = req.color {
+        persona.color = v;
+    }
+    if let Some(v) = req.description {
+        persona.description = v;
+    }
+    if let Some(v) = req.role {
+        persona.role = v;
+    }
+    if let Some(v) = req.tone {
+        persona.tone = v;
+    }
+    if let Some(v) = req.expertise {
+        persona.expertise = v;
+    }
+    if let Some(v) = req.instructions {
+        persona.instructions = v;
+    }
+    if let Some(v) = req.capabilities {
+        persona.capabilities = v
+            .iter()
+            .map(|s| parse_capability(s))
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    if let Some(v) = req.model {
+        persona.model = parse_model(&v)?;
+    }
+    if let Some(v) = req.default_cron {
+        validate_cron_5_field(&v)?;
+        persona.default_cron = v;
+    }
+    persona.updated_at = chrono::Utc::now();
+    persona
+        .validate()
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let repo = state.persona_repo.clone();
+    let persona_for_update = persona.clone();
+    let saved = db(move || worknest_db::Repository::update(&*repo, &persona_for_update)).await?;
+    Ok(Json(saved))
+}
+
+async fn delete_persona(
+    AuthUser(_user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let pid = PersonaId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid persona ID".into()))?;
+    let repo = state.persona_repo.clone();
+    db(move || worknest_db::Repository::delete(&*repo, pid)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn build_deployment_response(
+    state: &AppState,
+    deployment: AgentDeployment,
+) -> Result<AgentDeploymentResponse, AppError> {
+    let prepo = state.persona_repo.clone();
+    let pid = deployment.persona_id;
+    let persona = db(move || worknest_db::Repository::find_by_id(&*prepo, pid))
+        .await?
+        .ok_or_else(|| AppError::Internal("Persona row missing for deployment".into()))?;
+    Ok(AgentDeploymentResponse {
+        deployment,
+        persona,
+    })
+}
+
+fn deployment_etag(d: &AgentDeployment) -> String {
+    d.updated_at.to_rfc3339()
+}
+
+fn add_etag(headers: &mut HeaderMap, etag: &str) {
+    if let Ok(v) = HeaderValue::from_str(etag) {
+        headers.insert(header::ETAG, v);
+    }
+}
+
+async fn list_project_deployments(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(pid): Path<String>,
+) -> Result<Json<Vec<AgentDeploymentResponse>>, AppError> {
+    let project_id = ProjectId::from_string(&pid)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".into()))?;
+    let _project = load_project_for_access(&state, user.id, project_id).await?;
+    let drepo = state.deployment_repo.clone();
+    let deployments = db(move || drepo.list_by_project(project_id)).await?;
+    let mut out = Vec::with_capacity(deployments.len());
+    for d in deployments {
+        out.push(build_deployment_response(&state, d).await?);
+    }
+    Ok(Json(out))
+}
+
+async fn deploy_persona(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(pid): Path<String>,
+    Json(req): Json<DeployPersonaRequest>,
+) -> Result<(StatusCode, HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let project_id = ProjectId::from_string(&pid)
+        .map_err(|_| AppError::BadRequest("Invalid project ID".into()))?;
+    let _project = load_project_for_owner(&state, user.id, project_id).await?;
+
+    // Resolve the persona to validate the request and grab the default cron.
+    let prepo = state.persona_repo.clone();
+    let persona_id = req.persona_id;
+    let persona = db(move || worknest_db::Repository::find_by_id(&*prepo, persona_id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Persona not found".into()))?;
+
+    let cron_expression = req
+        .cron_expression
+        .unwrap_or_else(|| persona.default_cron.clone());
+    validate_cron_5_field(&cron_expression)?;
+
+    // Reject if a deployment already exists (idempotent: return the existing
+    // row in 409). The UNIQUE constraint also enforces this.
+    let drepo = state.deployment_repo.clone();
+    if let Some(existing) =
+        db(move || drepo.find_by_project_and_persona(project_id, persona_id)).await?
+    {
+        return Err(AppError::BadRequest(format!(
+            "Persona '{}' is already deployed to project {} (deployment {})",
+            persona.slug, project_id, existing.id
+        )));
+    }
+
+    let now = chrono::Utc::now();
+    let deployment = AgentDeployment {
+        id: AgentDeploymentId::new(),
+        project_id,
+        persona_id,
+        agent_user_id: None,
+        snapshot_name: None,
+        snapshot_role: None,
+        snapshot_tone: None,
+        snapshot_expertise: vec![],
+        snapshot_instructions: None,
+        snapshot_capabilities: vec![],
+        snapshot_model: None,
+        snapshot_taken_at: None,
+        workspace_path: None,
+        cron_expression,
+        next_tick_at: None,
+        tick_locked_at: None,
+        tick_lock_token: None,
+        status: AgentStatus::Pending,
+        last_error_step: None,
+        error_message: None,
+        error_count: 0,
+        current_ticket_id: None,
+        runs_today: 0,
+        touched_this_week: 0,
+        success_rate: 0.0,
+        last_activity_at: None,
+        created_at: now,
+        updated_at: now,
+    };
+    let drepo = state.deployment_repo.clone();
+    let deployment_for_create = deployment.clone();
+    let saved =
+        db(move || worknest_db::Repository::create(&*drepo, &deployment_for_create)).await?;
+    let evt_repo = state.event_repo.clone();
+    let evt_id = saved.id;
+    let _ = db(move || {
+        evt_repo.record(
+            evt_id,
+            worknest_core::models::AgentEventKind::DeploymentCreated,
+            "deployment created",
+            serde_json::json!({"persona_id": persona_id.to_string()}),
+        )
+    })
+    .await;
+
+    // Spawn the activation pipeline in the background; the client will poll
+    // GET /api/agent-deployments/{id} to observe the FSM advance to Running.
+    let activation_state = agents::activation::ActivationState {
+        auth_service: state.auth_service.clone(),
+        user_repo: state.user_repo.clone(),
+        project_repo: state.project_repo.clone(),
+        persona_repo: state.persona_repo.clone(),
+        deployment_repo: state.deployment_repo.clone(),
+        event_repo: state.event_repo.clone(),
+        agents_config: state.agents_config.clone(),
+    };
+    let saved_id = saved.id;
+    tokio::spawn(async move {
+        agents::activation::run_pipeline(
+            activation_state,
+            saved_id,
+            ActivationStep::RegisterIdentity,
+        )
+        .await;
+    });
+
+    let mut headers = HeaderMap::new();
+    add_etag(&mut headers, &deployment_etag(&saved));
+    let resp = build_deployment_response(&state, saved).await?;
+    Ok((StatusCode::CREATED, headers, Json(resp)))
+}
+
+async fn load_deployment_for_access(
+    state: &AppState,
+    user_id: UserId,
+    deployment_id: AgentDeploymentId,
+) -> Result<AgentDeployment, AppError> {
+    let drepo = state.deployment_repo.clone();
+    let deployment = db(move || worknest_db::Repository::find_by_id(&*drepo, deployment_id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Deployment not found".into()))?;
+    let _project = load_project_for_access(state, user_id, deployment.project_id).await?;
+    Ok(deployment)
+}
+
+async fn load_deployment_for_owner(
+    state: &AppState,
+    user_id: UserId,
+    deployment_id: AgentDeploymentId,
+) -> Result<AgentDeployment, AppError> {
+    let drepo = state.deployment_repo.clone();
+    let deployment = db(move || worknest_db::Repository::find_by_id(&*drepo, deployment_id))
+        .await?
+        .ok_or_else(|| AppError::NotFound("Deployment not found".into()))?;
+    let _project = load_project_for_owner(state, user_id, deployment.project_id).await?;
+    Ok(deployment)
+}
+
+async fn get_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let deployment = load_deployment_for_access(&state, user.id, dep_id).await?;
+    let mut headers = HeaderMap::new();
+    add_etag(&mut headers, &deployment_etag(&deployment));
+    let resp = build_deployment_response(&state, deployment).await?;
+    Ok((headers, Json(resp)))
+}
+
+async fn delete_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let _ = load_deployment_for_owner(&state, user.id, dep_id).await?;
+    let drepo = state.deployment_repo.clone();
+    db(move || worknest_db::Repository::delete(&*drepo, dep_id)).await?;
+    let agents_dir = state.agents_config.agents_dir.clone();
+    tokio::task::spawn_blocking(move || {
+        let workspace = agents_dir.join(dep_id.to_string());
+        // Order matters: detach the git worktree before removing the dir
+        // so the canonical's `.git/worktrees/<id>/` metadata gets cleaned up.
+        agents::git::tear_down_worktree(&workspace);
+        agents::workspace::tear_down(&agents_dir, dep_id);
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn check_if_match(headers: &HeaderMap, deployment: &AgentDeployment) -> Result<(), AppError> {
+    if let Some(v) = headers.get(header::IF_MATCH) {
+        let s = v
+            .to_str()
+            .map_err(|_| AppError::BadRequest("Invalid If-Match header".into()))?;
+        // Compare as DateTime values rather than strings — chrono emits
+        // "+00:00" via to_rfc3339() but serde-via-chrono emits "Z" in JSON
+        // bodies. Both forms denote the same instant; the client should not
+        // care which one round-trips.
+        let provided =
+            chrono::DateTime::parse_from_rfc3339(s.trim().trim_matches('"')).map_err(|_| {
+                AppError::BadRequest("Invalid If-Match (expected RFC3339 timestamp)".into())
+            })?;
+        if provided.timestamp_millis() != deployment.updated_at.timestamp_millis() {
+            return Err(AppError::PreconditionFailed(
+                "If-Match does not match deployment.updated_at".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn perform_status_change(
+    state: &AppState,
+    deployment: AgentDeployment,
+    from: &[AgentStatus],
+    to: AgentStatus,
+    event_kind: worknest_core::models::AgentEventKind,
+    event_msg: &'static str,
+) -> Result<AgentDeploymentResponse, AppError> {
+    let id = deployment.id;
+    let drepo = state.deployment_repo.clone();
+    let from_owned: Vec<AgentStatus> = from.to_vec();
+    let changed = db(move || drepo.transition_status(id, &from_owned, to)).await?;
+    if !changed {
+        return Err(AppError::BadRequest(format!(
+            "Deployment is in status {} which does not allow transition to {}",
+            deployment.status, to
+        )));
+    }
+    let evt_repo = state.event_repo.clone();
+    let _ = db(move || evt_repo.record(id, event_kind, event_msg, serde_json::Value::Null)).await;
+    let drepo = state.deployment_repo.clone();
+    let fresh = db(move || worknest_db::Repository::find_by_id(&*drepo, id))
+        .await?
+        .ok_or_else(|| AppError::Internal("Deployment vanished".into()))?;
+    build_deployment_response(state, fresh).await
+}
+
+async fn suspend_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers_in: HeaderMap,
+) -> Result<(HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let deployment = load_deployment_for_owner(&state, user.id, dep_id).await?;
+    check_if_match(&headers_in, &deployment)?;
+    let resp = perform_status_change(
+        &state,
+        deployment,
+        &[AgentStatus::Running],
+        AgentStatus::Paused,
+        worknest_core::models::AgentEventKind::Suspended,
+        "deployment suspended",
+    )
+    .await?;
+    let mut h = HeaderMap::new();
+    add_etag(&mut h, &deployment_etag(&resp.deployment));
+    Ok((h, Json(resp)))
+}
+
+async fn resume_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers_in: HeaderMap,
+) -> Result<(HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let deployment = load_deployment_for_owner(&state, user.id, dep_id).await?;
+    check_if_match(&headers_in, &deployment)?;
+    // From Paused → Running is a guarded UPDATE; from Stopped or Error we
+    // also re-enter the activation pipeline so the schedule gets recomputed.
+    let resp = perform_status_change(
+        &state,
+        deployment.clone(),
+        &[
+            AgentStatus::Paused,
+            AgentStatus::Stopped,
+            AgentStatus::Error,
+        ],
+        AgentStatus::Scheduling,
+        worknest_core::models::AgentEventKind::Resumed,
+        "deployment resumed",
+    )
+    .await?;
+    // Drive the rest of activation so next_tick_at gets recomputed.
+    let activation_state = agents::activation::ActivationState {
+        auth_service: state.auth_service.clone(),
+        user_repo: state.user_repo.clone(),
+        project_repo: state.project_repo.clone(),
+        persona_repo: state.persona_repo.clone(),
+        deployment_repo: state.deployment_repo.clone(),
+        event_repo: state.event_repo.clone(),
+        agents_config: state.agents_config.clone(),
+    };
+    tokio::spawn(async move {
+        agents::activation::run_pipeline(
+            activation_state,
+            dep_id,
+            ActivationStep::ScheduleNextTick,
+        )
+        .await;
+    });
+    let mut h = HeaderMap::new();
+    add_etag(&mut h, &deployment_etag(&resp.deployment));
+    Ok((h, Json(resp)))
+}
+
+async fn retry_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers_in: HeaderMap,
+) -> Result<(HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let deployment = load_deployment_for_owner(&state, user.id, dep_id).await?;
+    check_if_match(&headers_in, &deployment)?;
+    if deployment.status != AgentStatus::Error {
+        return Err(AppError::BadRequest(
+            "Retry only applies to deployments in Error state".into(),
+        ));
+    }
+    let resume_step = deployment
+        .last_error_step
+        .unwrap_or(ActivationStep::RegisterIdentity);
+    let resume_status = resume_step.entry_status();
+    let drepo = state.deployment_repo.clone();
+    let changed =
+        db(move || drepo.transition_status(dep_id, &[AgentStatus::Error], resume_status)).await?;
+    if !changed {
+        return Err(AppError::BadRequest(
+            "Deployment changed concurrently; refetch and retry".into(),
+        ));
+    }
+    let drepo = state.deployment_repo.clone();
+    let _ = db(move || drepo.clear_error_fields(dep_id)).await;
+    let evt_repo = state.event_repo.clone();
+    let _ = db(move || {
+        evt_repo.record(
+            dep_id,
+            worknest_core::models::AgentEventKind::Retried,
+            "retry requested",
+            serde_json::json!({"resume_step": resume_step.to_string()}),
+        )
+    })
+    .await;
+
+    let activation_state = agents::activation::ActivationState {
+        auth_service: state.auth_service.clone(),
+        user_repo: state.user_repo.clone(),
+        project_repo: state.project_repo.clone(),
+        persona_repo: state.persona_repo.clone(),
+        deployment_repo: state.deployment_repo.clone(),
+        event_repo: state.event_repo.clone(),
+        agents_config: state.agents_config.clone(),
+    };
+    tokio::spawn(async move {
+        agents::activation::run_pipeline(activation_state, dep_id, resume_step).await;
+    });
+
+    let drepo = state.deployment_repo.clone();
+    let fresh = db(move || worknest_db::Repository::find_by_id(&*drepo, dep_id))
+        .await?
+        .ok_or_else(|| AppError::Internal("Deployment vanished".into()))?;
+    let mut h = HeaderMap::new();
+    add_etag(&mut h, &deployment_etag(&fresh));
+    let resp = build_deployment_response(&state, fresh).await?;
+    Ok((h, Json(resp)))
+}
+
+async fn stop_deployment(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers_in: HeaderMap,
+) -> Result<(HeaderMap, Json<AgentDeploymentResponse>), AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let deployment = load_deployment_for_owner(&state, user.id, dep_id).await?;
+    check_if_match(&headers_in, &deployment)?;
+    let resp = perform_status_change(
+        &state,
+        deployment,
+        &[
+            AgentStatus::Running,
+            AgentStatus::Paused,
+            AgentStatus::Idle,
+            AgentStatus::Error,
+        ],
+        AgentStatus::Stopped,
+        worknest_core::models::AgentEventKind::Stopped,
+        "deployment stopped",
+    )
+    .await?;
+    let mut h = HeaderMap::new();
+    add_etag(&mut h, &deployment_etag(&resp.deployment));
+    Ok((h, Json(resp)))
+}
+
+#[derive(Debug, Deserialize)]
+struct ListDeploymentTicksQuery {
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+async fn list_deployment_ticks(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    axum::extract::Query(q): axum::extract::Query<ListDeploymentTicksQuery>,
+) -> Result<Json<Vec<AgentTick>>, AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let _ = load_deployment_for_access(&state, user.id, dep_id).await?;
+    let limit = q.limit.unwrap_or(50).clamp(1, 500);
+    let repo = state.tick_repo.clone();
+    let rows = db(move || repo.list_for_deployment(dep_id, limit)).await?;
+    Ok(Json(rows))
+}
+
+async fn list_deployment_events(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    axum::extract::Query(q): axum::extract::Query<ListDeploymentTicksQuery>,
+) -> Result<Json<Vec<AgentEvent>>, AppError> {
+    let dep_id = AgentDeploymentId::from_string(&id)
+        .map_err(|_| AppError::BadRequest("Invalid deployment ID".into()))?;
+    let _ = load_deployment_for_access(&state, user.id, dep_id).await?;
+    let limit = q.limit.unwrap_or(50).clamp(1, 500);
+    let repo = state.event_repo.clone();
+    let rows = db(move || repo.list_for_deployment(dep_id, limit)).await?;
+    Ok(Json(rows))
 }
 
 // ============================================================================

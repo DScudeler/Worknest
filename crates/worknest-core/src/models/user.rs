@@ -53,6 +53,11 @@ pub struct User {
     /// Optional avatar URL. Clients render the user's initials when absent.
     #[serde(default)]
     pub avatar_url: Option<String>,
+    /// Marks autonomous agent identities created by the agents subsystem.
+    /// These accounts cannot log in; they exist so agents can post comments
+    /// and own tickets like any other user.
+    #[serde(default)]
+    pub is_agent: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -67,6 +72,7 @@ impl User {
             email,
             full_name: None,
             avatar_url: None,
+            is_agent: false,
             created_at: now,
             updated_at: now,
         }

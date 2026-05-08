@@ -118,6 +118,11 @@ pub struct Ticket {
     pub created_by: UserId,
     pub due_date: Option<DateTime<Utc>>,
     pub estimate_hours: Option<f32>,
+    /// Parent ticket id, set when an Epic is decomposed into subtasks.
+    /// Cleared (`ON DELETE SET NULL`) if the parent is removed so children
+    /// outlive the orphaning event.
+    #[serde(default)]
+    pub parent_id: Option<TicketId>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -143,6 +148,7 @@ impl Ticket {
             created_by,
             due_date: None,
             estimate_hours: None,
+            parent_id: None,
             created_at: now,
             updated_at: now,
         }

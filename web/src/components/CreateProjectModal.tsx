@@ -25,6 +25,7 @@ export function CreateProjectModal({ open, onClose }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [repoPath, setRepoPath] = useState("");
   const [color, setColor] = useState<string>(COVERS[0]);
   // icon is currently a UI-only choice — backend doesn't store it yet (Phase 7+).
   const [icon, setIcon] = useState<string>(ICONS[0]);
@@ -42,6 +43,7 @@ export function CreateProjectModal({ open, onClose }: Props) {
       setStep(1);
       setName("");
       setDescription("");
+      setRepoPath("");
       setColor(COVERS[0]);
       setIcon(ICONS[0]);
       setInvitees(new Set());
@@ -51,7 +53,11 @@ export function CreateProjectModal({ open, onClose }: Props) {
 
   const createMut = useMutation({
     mutationFn: async () => {
-      const project = await projectsApi.create({ name, description: description || undefined });
+      const project = await projectsApi.create({
+        name,
+        description: description || undefined,
+        repo_path: repoPath.trim() || undefined,
+      });
       // V4 migration: owner is auto-added; invite the others.
       await Promise.all(
         Array.from(invitees)
@@ -82,10 +88,11 @@ export function CreateProjectModal({ open, onClose }: Props) {
       color,
       archived: false,
       created_by: user?.id ?? "preview",
+      repo_path: repoPath.trim() || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }),
-    [name, description, color, user],
+    [name, description, repoPath, color, user],
   );
 
   const peopleMinusMe = people.filter((p) => p.id !== user?.id);
@@ -154,6 +161,24 @@ export function CreateProjectModal({ open, onClose }: Props) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What's this project about?"
             />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="cp-repo">
+              Source repo (optional)
+            </label>
+            <input
+              id="cp-repo"
+              className="input"
+              value={repoPath}
+              onChange={(e) => setRepoPath(e.target.value)}
+              placeholder="/abs/path/to/repo  or  https://github.com/you/repo.git"
+              style={{ fontFamily: "ui-monospace, Menlo, monospace" }}
+            />
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              When set, agent deployments to this project bootstrap a per-agent
+              git worktree on branch <code>swarm/&lt;persona&gt;</code>. Leave
+              blank for projects where agents only comment / triage.
+            </div>
           </div>
           <div>
             <label className="field-label">Cover color</label>

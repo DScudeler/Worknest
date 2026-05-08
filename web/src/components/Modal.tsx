@@ -6,7 +6,7 @@ interface Props {
   onClose: () => void;
   title: ReactNode;
   subtitle?: ReactNode;
-  size?: "default" | "large";
+  size?: "default" | "large" | "agents";
   children: ReactNode;
   foot?: ReactNode;
 }
@@ -29,7 +29,7 @@ export function Modal({ open, onClose, title, subtitle, size = "default", childr
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={`modal${size === "large" ? " large" : ""}`}>
+      <div className={`modal${size === "large" ? " large" : size === "agents" ? " agents" : ""}`}>
         <div className="modal-head">
           <div>
             <h2>{title}</h2>

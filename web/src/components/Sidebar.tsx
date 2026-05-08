@@ -1,7 +1,7 @@
-import { Home, Inbox, LogOut, Settings as SettingsIcon, Star, Plus } from "lucide-react";
+import { Bot, Home, Inbox, LogOut, Settings as SettingsIcon, Star, Plus } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { projectsApi } from "../lib/api";
+import { personasApi, projectsApi } from "../lib/api";
 import type { Project } from "../lib/types";
 import { projectCover } from "../lib/colors";
 import { useAuth } from "../state/auth";
@@ -19,6 +19,10 @@ export function Sidebar({ onCreateProject }: Props) {
   const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: () => projectsApi.list(),
+  });
+  const { data: personas } = useQuery({
+    queryKey: ["personas"],
+    queryFn: () => personasApi.list(),
   });
 
   const top = (projects ?? [])
@@ -47,6 +51,11 @@ export function Sidebar({ onCreateProject }: Props) {
       <NavLink to="/my-tickets" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
         <Star size={16} />
         <span>My tickets</span>
+      </NavLink>
+      <NavLink to="/agents" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+        <Bot size={16} />
+        <span>Agents</span>
+        <span className="count">{personas?.length ?? 0}</span>
       </NavLink>
 
       <div className="nav-section">Projects</div>

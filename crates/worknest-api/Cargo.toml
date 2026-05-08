@@ -34,5 +34,12 @@ tower.workspace = true
 tower-http.workspace = true
 hyper.workspace = true
 
+# Agents subsystem
+cron.workspace = true
+fs2.workspace = true
+rand.workspace = true
+async-trait.workspace = true
+
 [dev-dependencies]
 mockall.workspace = true
+tempfile.workspace = true

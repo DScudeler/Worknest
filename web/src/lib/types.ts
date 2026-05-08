@@ -47,6 +47,9 @@ export interface Project {
   color: string | null;
   archived: boolean;
   created_by: UserId;
+  /// Optional source-repo path (local absolute or clone URL). Used by the
+  /// agents subsystem's BootstrapWorktree step. Null means no worktree.
+  repo_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -132,12 +135,14 @@ export interface RegisterRequest {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
+  repo_path?: string;
 }
 
 export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
   archived?: boolean;
+  repo_path?: string | null;
 }
 
 export interface CreateTicketRequest {
@@ -217,4 +222,241 @@ export function priorityLabel(p: Priority): string {
 
 export function ticketTypeLabel(t: TicketType): string {
   return t;
+}
+
+// =============================================================================
+// Agents (V7)
+// =============================================================================
+
+export type PersonaId = string;
+export type AgentDeploymentId = string;
+export type AgentTickId = string;
+export type AgentEventId = string;
+
+export type Capability =
+  | "Comment"
+  | "Label"
+  | "Assign"
+  | "SetPriority"
+  | "SetStatus"
+  | "Attach"
+  | "CreateTicket"
+  | "Close";
+
+export const CAPABILITIES: { id: Capability; label: string }[] = [
+  { id: "Comment", label: "Comment" },
+  { id: "Label", label: "Label" },
+  { id: "Assign", label: "Assign" },
+  { id: "SetPriority", label: "Set priority" },
+  { id: "SetStatus", label: "Set status" },
+  { id: "Attach", label: "Attach files" },
+  { id: "CreateTicket", label: "Create ticket" },
+  { id: "Close", label: "Close ticket" },
+];
+
+export type AgentModel = "Haiku" | "Sonnet" | "Opus";
+export const AGENT_MODELS: { id: AgentModel; label: string; tag: "fast" | "balanced" | "reasoning" }[] = [
+  // Tier names persisted in the DB are version-agnostic ("Haiku" / "Sonnet" /
+  // "Opus"); the labels and the wire model id resolve to the latest minor
+  // release per family at the time of this build.
+  { id: "Haiku", label: "Claude Haiku 4.5", tag: "fast" },
+  { id: "Sonnet", label: "Claude Sonnet 4.6", tag: "balanced" },
+  { id: "Opus", label: "Claude Opus 4.7", tag: "reasoning" },
+];
+
+export type AgentStatus =
+  | "Pending"
+  | "Registering"
+  | "Granting"
+  | "Snapshotting"
+  | "Provisioning"
+  | "Scheduling"
+  | "Running"
+  | "Paused"
+  | "Idle"
+  | "Stopped"
+  | "Error";
+
+export const AGENT_STATUSES: AgentStatus[] = [
+  "Running",
+  "Paused",
+  "Idle",
+  "Stopped",
+  "Error",
+];
+
+export type DisplayAgentStatus = "running" | "paused" | "idle" | "stopped" | "error" | "activating";
+
+/// Map the wire status to the lowercase tag the design CSS expects.
+/// Activation states (`Pending`/`Registering`/.../`Scheduling`) all collapse
+/// to "activating" — the UI shows a single neutral pill while the backend
+/// drives the deployment forward.
+export function toDisplayAgentStatus(s: AgentStatus): DisplayAgentStatus {
+  switch (s) {
+    case "Running":
+      return "running";
+    case "Paused":
+      return "paused";
+    case "Idle":
+      return "idle";
+    case "Stopped":
+      return "stopped";
+    case "Error":
+      return "error";
+    default:
+      return "activating";
+  }
+}
+
+export function agentStatusLabel(s: AgentStatus): string {
+  switch (s) {
+    case "Pending":
+      return "Pending";
+    case "Registering":
+      return "Registering";
+    case "Granting":
+      return "Granting access";
+    case "Snapshotting":
+      return "Snapshotting";
+    case "Provisioning":
+      return "Provisioning";
+    case "Scheduling":
+      return "Scheduling";
+    case "Running":
+      return "Running";
+    case "Paused":
+      return "Suspended";
+    case "Idle":
+      return "Idle";
+    case "Stopped":
+      return "Stopped";
+    case "Error":
+      return "Error";
+  }
+}
+
+export interface Persona {
+  id: PersonaId;
+  slug: string;
+  name: string;
+  emoji: string;
+  color: string;
+  description: string;
+  role: string;
+  tone: string;
+  expertise: string[];
+  instructions: string;
+  capabilities: Capability[];
+  model: AgentModel;
+  default_cron: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentDeployment {
+  id: AgentDeploymentId;
+  project_id: ProjectId;
+  persona_id: PersonaId;
+  agent_user_id: UserId | null;
+  snapshot_name: string | null;
+  snapshot_role: string | null;
+  snapshot_tone: string | null;
+  snapshot_expertise: string[];
+  snapshot_instructions: string | null;
+  snapshot_capabilities: Capability[];
+  snapshot_model: AgentModel | null;
+  snapshot_taken_at: string | null;
+  workspace_path: string | null;
+  cron_expression: string;
+  next_tick_at: string | null;
+  tick_locked_at: string | null;
+  tick_lock_token: string | null;
+  status: AgentStatus;
+  last_error_step: string | null;
+  error_message: string | null;
+  error_count: number;
+  current_ticket_id: TicketId | null;
+  runs_today: number;
+  touched_this_week: number;
+  success_rate: number;
+  last_activity_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/// Wire response shape for deployment endpoints — flattens the deployment
+/// row and embeds the persona alongside it.
+export interface AgentDeploymentResponse extends AgentDeployment {
+  persona: Persona;
+}
+
+export type TickOutcome = "Success" | "Failure" | "Skipped";
+
+export interface AgentTick {
+  id: AgentTickId;
+  deployment_id: AgentDeploymentId;
+  started_at: string;
+  finished_at: string | null;
+  outcome: TickOutcome | null;
+  touched_ticket_id: TicketId | null;
+  action_summary: string | null;
+  error_message: string | null;
+}
+
+export type AgentEventKind =
+  | "DeploymentCreated"
+  | "IdentityRegistered"
+  | "MembershipGranted"
+  | "PersonaSnapshotted"
+  | "WorkspaceProvisioned"
+  | "TickScheduled"
+  | "MarkedRunning"
+  | "ActivationFailed"
+  | "Suspended"
+  | "Resumed"
+  | "Retried"
+  | "Stopped"
+  | "TickFailedThreshold";
+
+export interface AgentEvent {
+  id: AgentEventId;
+  deployment_id: AgentDeploymentId;
+  kind: AgentEventKind;
+  payload: unknown;
+  message: string;
+  at: string;
+}
+
+export interface CreatePersonaRequest {
+  slug: string;
+  name: string;
+  emoji: string;
+  color: string;
+  description: string;
+  role: string;
+  tone: string;
+  expertise: string[];
+  instructions: string;
+  capabilities: Capability[];
+  model: AgentModel;
+  default_cron: string;
+}
+
+export interface UpdatePersonaRequest {
+  name?: string;
+  emoji?: string;
+  color?: string;
+  description?: string;
+  role?: string;
+  tone?: string;
+  expertise?: string[];
+  instructions?: string;
+  capabilities?: Capability[];
+  model?: AgentModel;
+  default_cron?: string;
+}
+
+export interface CreateAgentDeploymentRequest {
+  persona_id: PersonaId;
+  cron_expression?: string;
 }

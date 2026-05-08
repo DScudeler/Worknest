@@ -52,7 +52,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async
-tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "signal"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "signal", "process", "io-util"] }
 
 # Web framework
 axum = { version = "0.8", features = ["multipart"] }
@@ -63,9 +63,19 @@ hyper = { version = "1.7", features = ["full"] }
 # Testing
 proptest = "1.4"
 mockall = "0.13.1"
+tempfile = "3.10"
 
 # HTTP client (used by integration tests etc.)
 reqwest = "0.12"
+
+# Cron evaluation for the agents scheduler
+cron = "0.15"
+
+# Advisory file locking for per-deployment tick mutual exclusion
+fs2 = "0.4"
+
+# `async fn` in traits with dyn dispatch (used by the agents tick executor)
+async-trait = "0.1"
 
 [profile.release]
 opt-level = 3

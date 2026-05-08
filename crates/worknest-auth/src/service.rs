@@ -140,6 +140,14 @@ impl AuthService {
         self.token_manager.verify_token(token)
     }
 
+    /// Mint a JWT for a user without going through the password-login flow.
+    /// Used by the agents subsystem to issue tokens for autonomous identity
+    /// users (whose `password_hash` is random and can't be presented through
+    /// the public login endpoint).
+    pub fn generate_token_for_user(&self, user_id: UserId, username: String) -> Result<AuthToken> {
+        self.token_manager.generate_token(user_id, username)
+    }
+
     /// Get user from token. Rejects tokens that were issued before the user's
     /// last password change — this is how we revoke active sessions on
     /// password rotation without server-side session storage.

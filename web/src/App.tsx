@@ -11,6 +11,7 @@ import { AppLayout } from "./components/AppLayout";
 import { DashboardWrapper } from "./screens/DashboardWrapper";
 import { ProjectScreen } from "./screens/ProjectScreen";
 import { PlaceholderScreen } from "./screens/PlaceholderScreen";
+import { AgentsScreen } from "./screens/AgentsScreen";
 
 export function App() {
   return (
@@ -27,6 +28,7 @@ export function App() {
                   <Route path="projects/:projectId" element={<ProjectScreen />} />
                   <Route path="inbox" element={<PlaceholderScreen title="Inbox" />} />
                   <Route path="my-tickets" element={<PlaceholderScreen title="My tickets" />} />
+                  <Route path="agents" element={<AgentsScreen />} />
                   <Route path="settings" element={<PlaceholderScreen title="Settings" />} />
                 </Route>
               </Route>

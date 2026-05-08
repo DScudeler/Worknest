@@ -6,13 +6,23 @@
 
 import type {
   AddMemberRequest,
+  AgentDeployment,
+  AgentDeploymentId,
+  AgentDeploymentResponse,
+  AgentEvent,
+  AgentStatus,
+  AgentTick,
   Attachment,
   AuthResponse,
   Comment,
+  CreateAgentDeploymentRequest,
+  CreatePersonaRequest,
   CreateProjectRequest,
   CreateTicketRequest,
   DashboardStats,
   LoginRequest,
+  Persona,
+  PersonaId,
   Project,
   ProjectId,
   ProjectMember,
@@ -21,6 +31,7 @@ import type {
   Tag,
   Ticket,
   TicketId,
+  UpdatePersonaRequest,
   UpdateProjectRequest,
   UpdateTicketRequest,
   User,
@@ -225,3 +236,63 @@ export const attachmentsApi = {
   },
   remove: (id: string) => request<void>(`/attachments/${id}`, { method: "DELETE" }),
 };
+
+// Personas (V7) ------------------------------------------------------------
+
+export const personasApi = {
+  list: () => request<Persona[]>("/personas"),
+  get: (id: PersonaId) => request<Persona>(`/personas/${id}`),
+  create: (data: CreatePersonaRequest) =>
+    request<Persona>("/personas", { method: "POST", body: data }),
+  update: (id: PersonaId, data: UpdatePersonaRequest) =>
+    request<Persona>(`/personas/${id}`, { method: "PUT", body: data }),
+  remove: (id: PersonaId) =>
+    request<void>(`/personas/${id}`, { method: "DELETE" }),
+};
+
+// Agent deployments (V7) ---------------------------------------------------
+
+export const agentDeploymentsApi = {
+  listByProject: (projectId: ProjectId) =>
+    request<AgentDeploymentResponse[]>(`/projects/${projectId}/agent-deployments`),
+  deploy: (projectId: ProjectId, data: CreateAgentDeploymentRequest) =>
+    request<AgentDeploymentResponse>(`/projects/${projectId}/agent-deployments`, {
+      method: "POST",
+      body: data,
+    }),
+  get: (id: AgentDeploymentId) =>
+    request<AgentDeploymentResponse>(`/agent-deployments/${id}`),
+  remove: (id: AgentDeploymentId) =>
+    request<void>(`/agent-deployments/${id}`, { method: "DELETE" }),
+  suspend: (id: AgentDeploymentId, ifMatch?: string) =>
+    request<AgentDeploymentResponse>(`/agent-deployments/${id}/suspend`, {
+      method: "POST",
+      body: {},
+      headers: ifMatch ? { "If-Match": ifMatch } : {},
+    }),
+  resume: (id: AgentDeploymentId, ifMatch?: string) =>
+    request<AgentDeploymentResponse>(`/agent-deployments/${id}/resume`, {
+      method: "POST",
+      body: {},
+      headers: ifMatch ? { "If-Match": ifMatch } : {},
+    }),
+  retry: (id: AgentDeploymentId, ifMatch?: string) =>
+    request<AgentDeploymentResponse>(`/agent-deployments/${id}/retry`, {
+      method: "POST",
+      body: {},
+      headers: ifMatch ? { "If-Match": ifMatch } : {},
+    }),
+  stop: (id: AgentDeploymentId, ifMatch?: string) =>
+    request<AgentDeploymentResponse>(`/agent-deployments/${id}/stop`, {
+      method: "POST",
+      body: {},
+      headers: ifMatch ? { "If-Match": ifMatch } : {},
+    }),
+  ticks: (id: AgentDeploymentId, limit = 50) =>
+    request<AgentTick[]>(`/agent-deployments/${id}/ticks?limit=${limit}`),
+  events: (id: AgentDeploymentId, limit = 50) =>
+    request<AgentEvent[]>(`/agent-deployments/${id}/events?limit=${limit}`),
+};
+
+// Optional re-export so consumers don't need to drill into ./types directly.
+export type { AgentDeployment, AgentStatus };

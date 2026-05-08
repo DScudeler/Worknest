@@ -56,7 +56,7 @@ impl TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE project_id = ?1 ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -80,7 +80,7 @@ impl TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE assignee_id = ?1 ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -104,7 +104,7 @@ impl TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE status = ?1 ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -132,7 +132,7 @@ impl TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE project_id = ?1 AND status = ?2 ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -159,7 +159,7 @@ impl TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE created_by = ?1 ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -326,7 +326,7 @@ impl TicketRepository {
 
         let sql = format!(
             "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
-                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at, t.parent_id
              FROM tickets t{where_sql}{order_sql}{tail}"
         );
 
@@ -353,14 +353,14 @@ impl TicketRepository {
 
         let sql = if project_id.is_some() {
             "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
-                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at, t.parent_id
              FROM tickets t
              JOIN tickets_fts fts ON t.id = fts.ticket_id
              WHERE fts.tickets_fts MATCH ?1 AND t.project_id = ?2
              ORDER BY t.created_at DESC"
         } else {
             "SELECT t.id, t.project_id, t.title, t.description, t.ticket_type, t.status, t.priority,
-                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at
+                    t.assignee_id, t.created_by, t.due_date, t.estimate_hours, t.created_at, t.updated_at, t.parent_id
              FROM tickets t
              JOIN tickets_fts fts ON t.id = fts.ticket_id
              WHERE fts.tickets_fts MATCH ?1
@@ -397,7 +397,7 @@ impl Repository<Ticket, TicketId> for TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets WHERE id = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -419,7 +419,7 @@ impl Repository<Ticket, TicketId> for TicketRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, title, description, ticket_type, status, priority,
-                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at
+                        assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id
                  FROM tickets ORDER BY created_at DESC",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -441,8 +441,8 @@ impl Repository<Ticket, TicketId> for TicketRepository {
 
         conn.execute(
             "INSERT INTO tickets (id, project_id, title, description, ticket_type, status, priority,
-                                  assignee_id, created_by, due_date, estimate_hours, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                  assignee_id, created_by, due_date, estimate_hours, created_at, updated_at, parent_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 entity.id.0.to_string(),
                 entity.project_id.0.to_string(),
@@ -457,6 +457,7 @@ impl Repository<Ticket, TicketId> for TicketRepository {
                 entity.estimate_hours,
                 entity.created_at.to_rfc3339(),
                 entity.updated_at.to_rfc3339(),
+                entity.parent_id.map(|id| id.0.to_string()),
             ],
         )
         .map_err(|e| DbError::Query(e.to_string()))?;
@@ -473,8 +474,8 @@ impl Repository<Ticket, TicketId> for TicketRepository {
         let rows_affected = conn
             .execute(
                 "UPDATE tickets SET title = ?1, description = ?2, ticket_type = ?3, status = ?4, priority = ?5,
-                                    assignee_id = ?6, due_date = ?7, estimate_hours = ?8, updated_at = ?9
-                 WHERE id = ?10",
+                                    assignee_id = ?6, due_date = ?7, estimate_hours = ?8, parent_id = ?9, updated_at = ?10
+                 WHERE id = ?11",
                 params![
                     entity.title,
                     entity.description,
@@ -484,6 +485,7 @@ impl Repository<Ticket, TicketId> for TicketRepository {
                     entity.assignee_id.map(|id| id.0.to_string()),
                     entity.due_date.map(|d| d.to_rfc3339()),
                     entity.estimate_hours,
+                    entity.parent_id.map(|id| id.0.to_string()),
                     Utc::now().to_rfc3339(),
                     entity.id.0.to_string(),
                 ],
@@ -558,6 +560,12 @@ fn row_to_ticket(row: &Row) -> rusqlite::Result<Ticket> {
     let updated_at_str: String = row.get(12)?;
     let updated_at = parse_datetime(&updated_at_str)?;
 
+    let parent_id_str: Option<String> = row.get(13)?;
+    let parent_id = match parent_id_str {
+        Some(s) => Some(TicketId::from_uuid(parse_uuid(&s)?)),
+        None => None,
+    };
+
     Ok(Ticket {
         id,
         project_id,
@@ -570,6 +578,7 @@ fn row_to_ticket(row: &Row) -> rusqlite::Result<Ticket> {
         created_by,
         due_date,
         estimate_hours: row.get(10)?,
+        parent_id,
         created_at,
         updated_at,
     })

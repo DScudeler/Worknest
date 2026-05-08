@@ -21,6 +21,14 @@ pub fn hash_password(password: &str) -> Result<String> {
     hash(password, BCRYPT_COST).map_err(|e| AuthError::Internal(e.to_string()))
 }
 
+/// Hash a password without running the strength validator. Reserved for
+/// system-internal callers (e.g. the agents subsystem, which generates a
+/// random unguessable password for autonomous-agent users that never log in
+/// via `/api/auth/login`).
+pub fn hash_password_unchecked(password: &str) -> Result<String> {
+    hash(password, BCRYPT_COST).map_err(|e| AuthError::Internal(e.to_string()))
+}
+
 /// Verify a password against a hash
 ///
 /// # Arguments
