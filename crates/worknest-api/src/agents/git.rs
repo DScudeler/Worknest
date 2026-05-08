@@ -1,10 +1,9 @@
 //! Git worktree bootstrap for a deployment.
 //!
-//! Mirrors cl_agent's swarm-init/spawn flow: there's a single "canonical"
-//! checkout per project (cloned once into `<AGENTS_DIR>/_projects/<pid>/repo`,
-//! or the operator-supplied local path used directly), and each deployment's
-//! workspace dir IS its own git worktree on branch `swarm/<persona-slug>`,
-//! sharing `.git/` with the canonical.
+//! Each project has a single "canonical" checkout (cloned once into
+//! `<AGENTS_DIR>/_projects/<pid>/repo`, or the operator-supplied local path
+//! used directly). Each deployment's workspace dir IS its own git worktree
+//! on branch `swarm/<persona-slug>`, sharing `.git/` with the canonical.
 //!
 //! `repo_path == None` is a no-op aside from `mkdir -p <workspace>`: agents
 //! that don't write code (Triage, Standup, Docs Writer, …) skip the worktree
@@ -137,10 +136,10 @@ fn resolve_canonical(
 
 /// Bootstrap (or re-bootstrap) the per-deployment worktree.
 ///
-/// The deployment's workspace dir IS the git worktree (mirroring
-/// cl_agent's `agents/<persona>/` layout). When `project_repo_path` is
-/// `None` the function only ensures the dir exists — agent gets a
-/// config-only workspace.
+/// The deployment's workspace dir IS the git worktree, with project source
+/// files checked out at the workspace root. When `project_repo_path` is
+/// `None` the function only ensures the dir exists — the agent gets a
+/// config-only workspace and cannot edit code.
 ///
 /// Idempotent: if `<workspace>/.git` already exists the function returns
 /// success without touching anything. This is what makes the pipeline safe

@@ -1,9 +1,11 @@
 //! Agents subsystem: activation pipeline + cron-driven tick scheduler.
 //!
-//! The principles are borrowed from `cl_agent` (`~/dev/ai/cl_agent`):
-//! per-deployment workspace directories on disk, JWT-stored agent identities,
-//! `flock`-style mutual exclusion, and a stateless tick that drives one
-//! ticket toward a terminal state per session.
+//! Each deployment gets its own on-disk workspace under `WORKNEST_AGENTS_DIR`
+//! (a git worktree of the project repo when `repo_path` is set), a JWT-backed
+//! agent identity, an `flock`-style advisory lock for tick mutual exclusion,
+//! and a stateless tick that drives one ticket toward a terminal state per
+//! session. The MCP server agents talk to lives in this repo at
+//! `worknest-mcp/`; nothing outside the workspace tree is required.
 
 pub mod activation;
 pub mod git;
@@ -13,7 +15,7 @@ pub mod templates_render;
 pub mod tick_executor;
 pub mod workspace;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Runtime configuration for the agents subsystem. Built once at boot from
@@ -24,9 +26,11 @@ pub struct AgentsConfig {
     /// `~/.local/share/worknest/agents` (or `./worknest-agents` if HOME
     /// is unset).
     pub agents_dir: PathBuf,
-    /// Absolute path to the cl_agent worknest-mcp directory (the Python
-    /// package referenced from each deployment's `.mcp.json`). Required —
-    /// agents fail to provision without it.
+    /// Absolute path to the in-repo `worknest-mcp/` directory (the Python
+    /// package referenced from each deployment's `.mcp.json`). Auto-detected
+    /// from the binary location at boot; set `WORKNEST_AGENT_MCP_DIR` to
+    /// override (deployed binaries that live outside the repo, packaged
+    /// builds, etc.).
     pub mcp_dir: Option<PathBuf>,
     /// Binary name (or absolute path) for the `claude` CLI. Default `claude`,
     /// resolved via `PATH`.
@@ -48,7 +52,8 @@ impl AgentsConfig {
             });
         let mcp_dir = std::env::var("WORKNEST_AGENT_MCP_DIR")
             .ok()
-            .map(PathBuf::from);
+            .map(PathBuf::from)
+            .or_else(default_mcp_dir);
         let claude_bin = std::env::var("WORKNEST_CLAUDE_BIN").unwrap_or_else(|_| "claude".into());
         let worknest_url = std::env::var("WORKNEST_PUBLIC_URL")
             .unwrap_or_else(|_| format!("http://localhost:{default_port}"));
@@ -79,9 +84,11 @@ pub fn preflight_check(cfg: &AgentsConfig) {
     match cfg.mcp_dir.as_deref() {
         None => {
             tracing::warn!(
-                "[agents preflight] WORKNEST_AGENT_MCP_DIR is not set. Agent activations will \
-                 fail at ProvisionWorkspace because the rendered .mcp.json points at an unset \
-                 location. Set it to the absolute path of cl_agent's worknest-mcp dir."
+                "[agents preflight] could not locate the worknest-mcp/ directory and \
+                 WORKNEST_AGENT_MCP_DIR is not set. Agent activations will fail at \
+                 ProvisionWorkspace until this is resolved. Run `cd worknest-mcp && uv \
+                 sync` from a clone of this repo, or point WORKNEST_AGENT_MCP_DIR at the \
+                 worknest-mcp/ directory of an existing checkout."
             );
         },
         Some(dir) => {
@@ -155,6 +162,60 @@ pub fn preflight_check(cfg: &AgentsConfig) {
             );
         },
     }
+}
+
+/// Auto-locate the in-repo `worknest-mcp/` directory.
+///
+/// Tries, in order:
+///   1. `CARGO_MANIFEST_DIR/../../worknest-mcp` — the workspace-relative
+///      location when running `cargo run -p worknest-api` from a checkout.
+///   2. Walking upward from the running executable's directory looking for
+///      a `worknest-mcp/pyproject.toml` (covers `cargo run`, an installed
+///      `target/release/worknest-api`, and packaged builds where the binary
+///      ships next to the MCP source).
+///   3. Walking upward from CWD as a last resort.
+///
+/// Returns `None` if no candidate validates — the operator must then set
+/// `WORKNEST_AGENT_MCP_DIR` explicitly. The preflight check warns clearly
+/// in that case.
+fn default_mcp_dir() -> Option<PathBuf> {
+    fn validate(p: PathBuf) -> Option<PathBuf> {
+        if p.join("pyproject.toml").is_file() {
+            Some(p)
+        } else {
+            None
+        }
+    }
+    fn walk_up(start: &Path) -> Option<PathBuf> {
+        let mut cur = Some(start);
+        while let Some(d) = cur {
+            if let Some(hit) = validate(d.join("worknest-mcp")) {
+                return Some(hit);
+            }
+            cur = d.parent();
+        }
+        None
+    }
+
+    // 1. Cargo manifest dir → walk up from `crates/worknest-api/`.
+    if let Some(hit) = walk_up(Path::new(env!("CARGO_MANIFEST_DIR"))) {
+        return Some(hit);
+    }
+    // 2. Exe dir → walk up from `target/<profile>/worknest-api`.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if let Some(hit) = walk_up(parent) {
+                return Some(hit);
+            }
+        }
+    }
+    // 3. CWD fallback.
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(hit) = walk_up(&cwd) {
+            return Some(hit);
+        }
+    }
+    None
 }
 
 fn resolve_binary(spec: &str) -> Option<PathBuf> {

@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 use worknest_core::models::{AgentDeployment, Persona};
 
-use super::templates::{AGENT_TICK_MD, CLAUDE_MD, MCP_JSON, SETTINGS_JSON};
+use super::templates::{AGENT_TICK_MD, CLAUDE_MD, GUARD_SCRIPT, MCP_JSON, SETTINGS_JSON};
 use super::templates_render::{render, RenderError};
 
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +91,7 @@ pub fn provision(
     let project_id = deployment.project_id.to_string();
     let deployment_id = deployment.id.to_string();
     let token_file = claude_dir.join("token");
+    let guard_script = claude_dir.join("guard-worktree.sh");
 
     // Project-shared persona→user_id map, written under
     // <agents_dir>/_projects/<project_id>/personas.json. The MCP server's
@@ -118,6 +119,8 @@ pub fn provision(
     vars.insert("token_file", token_file.display().to_string());
     vars.insert("mcp_dir", mcp_dir.display().to_string());
     vars.insert("personas_path", personas_path.display().to_string());
+    vars.insert("workspace_path", dir.display().to_string());
+    vars.insert("guard_script", guard_script.display().to_string());
 
     let claude_md = render(CLAUDE_MD, &vars)?;
     let mcp_json = render(MCP_JSON, &vars)?;
@@ -141,6 +144,20 @@ pub fn provision(
             .permissions();
         perms.set_mode(0o600);
         std::fs::set_permissions(&token_file, perms).map_err(io("chmod token file"))?;
+    }
+
+    // PreToolUse worktree guard: each deployment ships its own copy so a
+    // moved or repackaged Worknest install can't break already-active
+    // agents. chmod 755 — Claude Code spawns it via the hook runner.
+    std::fs::write(&guard_script, GUARD_SCRIPT).map_err(io("write guard script"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&guard_script)
+            .map_err(io("stat guard script"))?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&guard_script, perms).map_err(io("chmod guard script"))?;
     }
 
     // Touch the advisory lock file so flock() has a target.
@@ -321,7 +338,26 @@ mod tests {
         assert!(dir.join(".claude/settings.json").exists());
         assert!(dir.join(".claude/commands/agent-tick.md").exists());
         assert!(dir.join(".claude/token").exists());
+        assert!(dir.join(".claude/guard-worktree.sh").exists());
         assert!(dir.join("tick.lock").exists());
+
+        // Settings should pin CLAUDE_PROJECT_DIR to the workspace and wire
+        // the PreToolUse hook to the per-deployment guard script.
+        let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
+        assert!(settings.contains(&dir.display().to_string()));
+        assert!(settings.contains("guard-worktree.sh"));
+        assert!(settings.contains("\"PreToolUse\""));
+
+        // Guard script should be executable on Unix.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.join(".claude/guard-worktree.sh"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o755);
+        }
 
         let claude_md = std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
         assert!(claude_md.contains("Tech Lead"));

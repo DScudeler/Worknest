@@ -43,5 +43,10 @@ worknest-vscode/.vscode-test/
 node_modules/
 npm-debug.log*
 
+# Python (worknest-mcp)
+worknest-mcp/.venv/
+**/__pycache__/
+*.pyc
+
 # AI
 .claude/

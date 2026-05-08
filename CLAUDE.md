@@ -23,6 +23,7 @@ Plus:
 
 - `web/` — React + Vite + TypeScript SPA (the active frontend). **Not** a Cargo crate.
 - `worknest-vscode/` — TypeScript VSCode extension (axios client, tree view, status bar, git integration). Not part of the Cargo workspace.
+- `worknest-mcp/` — Python MCP server (FastMCP) that exposes the REST API to autonomous agents. Launched per-tick by Claude Code via `uv run`. Not part of the Cargo workspace.
 - `legacy/worknest-gui/` — retired egui frontend, excluded from the Cargo workspace.
 
 ## Build commands
@@ -81,6 +82,8 @@ API env vars (see `.env`): `PORT`, `WORKNEST_DB_PATH`, `WORKNEST_SECRET_KEY` (re
 **Tags:** `Ticket` responses embed a `tags: Vec<Tag>` field via the `TicketResponse` DTO (flatten over the inner `Ticket`). `CreateTicketRequest` and `UpdateTicketRequest` accept an optional `tag_ids: Vec<TagId>`. `GET /api/tags` lists the catalogue; the seed data lives in V5 migration.
 
 **Stats:** `GET /api/stats` returns `{ open_tickets, assigned_to_me, due_this_week, active_projects }` for the authenticated user, computed from the existing visibility filter.
+
+**Agents:** Each deployment is a `(persona, project)` pair backed by a JWT-identity user. On activation, `crates/worknest-api/src/agents/` provisions a per-deployment workspace at `$WORKNEST_AGENTS_DIR/<deployment_id>/` (default `~/.local/share/worknest/agents/`) — the workspace IS the project's git worktree on branch `swarm/<persona-slug>` when `repo_path` is set. `CLAUDE.md`, `.mcp.json`, `.claude/settings.json`, the JWT token, and the `guard-worktree.sh` PreToolUse hook are rendered inside it; the hook restricts edits to paths under `CLAUDE_PROJECT_DIR=<workspace>`. A cron-driven scheduler claims due deployments via an `flock` advisory lock and spawns `claude --permission-mode auto -p /agent-tick`. The MCP server in `worknest-mcp/` (Python, FastMCP) is launched per-tick via `uv run --directory <repo>/worknest-mcp worknest-mcp` and exposes `wn_*` tools that hit the REST API. One-time setup: `cd worknest-mcp && uv sync`. Runtime requirements: `claude`, `uv`, and (when projects have `repo_path`) `git` on `PATH`.
 
 **Frontend (`web/`):** Vite + React 18 + TypeScript. Routing via React Router. Server state via TanStack Query. Auth/theme contexts in `web/src/state/`. Design tokens + component CSS in `web/src/styles/`. Lucide for icons. Toasts via `react-hot-toast`. Auth token + current user persist via `localStorage`. The Vite dev server proxies `/api` to `127.0.0.1:3000`, so dev needs no CORS setup.
 
