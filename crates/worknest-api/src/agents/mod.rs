@@ -38,7 +38,7 @@ pub struct AgentsConfig {
     /// Public URL the MCP server uses to reach Worknest, e.g.
     /// `http://localhost:3000`. Defaults to `http://localhost:<PORT>`.
     pub worknest_url: String,
-    /// Hard ceiling per tick subprocess in seconds. Default 600.
+    /// Hard ceiling per tick subprocess in seconds. Default 1800 (30 min).
     pub tick_timeout_secs: u64,
 }
 
@@ -60,7 +60,7 @@ impl AgentsConfig {
         let tick_timeout_secs = std::env::var("WORKNEST_AGENT_TICK_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(600);
+            .unwrap_or(1800);
         Self {
             agents_dir,
             mcp_dir,

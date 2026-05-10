@@ -37,7 +37,9 @@ pub struct SchedulerState {
 }
 
 const TICK_LOOP_INTERVAL_SECS: u64 = 15;
-const STALE_LOCK_SECS: i64 = 600; // 10 minutes
+// Must exceed `AgentsConfig::tick_timeout_secs` (default 1800) so a
+// still-running tick is never falsely treated as crashed and reclaimed.
+const STALE_LOCK_SECS: i64 = 2400; // 40 minutes
 const CLAIM_BATCH: usize = 16;
 const MAX_TICK_FAILURES: i32 = 3;
 
