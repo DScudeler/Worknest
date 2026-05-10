@@ -13,6 +13,10 @@ it according to your persona below.
 
 {{persona_definition}}
 
+## Peers in this project
+
+{{peers}}
+
 ## How to work
 
 1. **Stop check.** If `.claude/swarm-stop` exists, do nothing and exit
@@ -25,9 +29,12 @@ it according to your persona below.
 4. **Drive one ticket to a terminal state.**
    - For `Epic` tickets where you are the tech-lead: decompose into 2–5
      subtasks via `wn_create_subtask(parent_id=<epic_id>, title=...,
-     assignee_persona=<frontend|backend|...>, priority=...)`. After
-     creating subtasks, post a `wn_comment` on the epic listing the
-     children, then move it to `InProgress`.
+     assignee_persona=<peer-slug>, priority=...)`. **Pick `<peer-slug>`
+     from the "Peers in this project" section above** — never assume a
+     slug that isn't listed there. If no peer matches, leave the subtask
+     unassigned rather than misrouting it. After creating subtasks, post
+     a `wn_comment` on the epic listing the children, then move it to
+     `InProgress`.
    - For non-tech-lead workers: post a 3–6 bullet plan as your first
      comment, then act according to your persona's `instructions` and
      `capabilities`.

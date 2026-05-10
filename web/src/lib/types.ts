@@ -135,6 +135,7 @@ export interface RegisterRequest {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
+  color?: string;
   repo_path?: string;
 }
 
@@ -142,6 +143,7 @@ export interface UpdateProjectRequest {
   name?: string;
   description?: string | null;
   archived?: boolean;
+  color?: string | null;
   repo_path?: string | null;
 }
 
@@ -180,9 +182,9 @@ export function tagSlug(tag: { name: string }): TagSlug | null {
   return KNOWN_TAG_SLUGS.includes(candidate as TagSlug) ? (candidate as TagSlug) : null;
 }
 
-// Display helpers — collapse 5 backend statuses to 4 design statuses (review→
-// progress, closed→blocked treatment) for color/spacing.
-export type DisplayStatus = "open" | "progress" | "done" | "blocked";
+// Display helpers — Review is first-class (own color); Closed reuses the
+// "blocked" red treatment for color/spacing.
+export type DisplayStatus = "open" | "progress" | "review" | "done" | "blocked";
 export type DisplayPriority = "low" | "med" | "high" | "urgent";
 
 export function toDisplayStatus(s: TicketStatus): DisplayStatus {
@@ -190,8 +192,9 @@ export function toDisplayStatus(s: TicketStatus): DisplayStatus {
     case "Open":
       return "open";
     case "InProgress":
-    case "Review":
       return "progress";
+    case "Review":
+      return "review";
     case "Done":
       return "done";
     case "Closed":

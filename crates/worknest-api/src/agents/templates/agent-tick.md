@@ -40,9 +40,11 @@ uses your plan + subsequent progress comments to catch up.
 For each Epic ticket assigned to you with no children:
 
 1. Read its full description and any prior comments.
-2. Pick 2–5 subtasks with the most relevant assignee personas (e.g.
-   `frontend`, `backend`, `docs`). Use the persona's role in their card
-   to choose.
+2. Pick 2–5 subtasks with the most relevant assignee personas. **Choose
+   `assignee_persona` from the "Peers in this project" section of
+   `CLAUDE.md`** — that is the authoritative roster of who is actually
+   deployed here. Never invent a slug. If nothing matches, leave the
+   subtask unassigned rather than misrouting it.
 3. For each subtask, call:
    ```
    wn_create_subtask(

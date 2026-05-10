@@ -2,8 +2,9 @@
 //!
 //! Personas are the workspace-shared catalogue of agent definitions. They are
 //! visible to every authenticated user (no per-user ownership filter) and are
-//! seeded with 9 entries by migration V7. A persona becomes runtime context for
-//! a per-project [`AgentDeployment`](super::agent_deployment::AgentDeployment),
+//! seeded with 11 entries by migrations V7 + V9 + V10. A persona becomes
+//! runtime context for a per-project
+//! [`AgentDeployment`](super::agent_deployment::AgentDeployment),
 //! at which point its config is *snapshotted* into the deployment row so that
 //! later edits to the persona do not disturb in-flight ticks.
 

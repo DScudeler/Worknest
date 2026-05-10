@@ -14,6 +14,7 @@ interface Column {
 const COLUMNS: Column[] = [
   { status: "Open", label: "Open", color: "var(--status-open)" },
   { status: "InProgress", label: "In Progress", color: "var(--status-progress)" },
+  { status: "Review", label: "In Review", color: "var(--status-review)" },
   { status: "Done", label: "Done", color: "var(--status-done)" },
   { status: "Closed", label: "Closed", color: "var(--status-blocked)" },
 ];
@@ -32,9 +33,7 @@ export function KanbanBoard({ tickets, shortId, users, onTicketClick, onAddTicke
     const m = new Map<TicketStatus, Ticket[]>();
     for (const c of COLUMNS) m.set(c.status, []);
     for (const t of tickets) {
-      // collapse Review → InProgress (4-column design), Closed stays as its own.
-      const key: TicketStatus = t.status === "Review" ? "InProgress" : t.status;
-      const arr = m.get(key);
+      const arr = m.get(t.status);
       if (arr) arr.push(t);
     }
     return m;

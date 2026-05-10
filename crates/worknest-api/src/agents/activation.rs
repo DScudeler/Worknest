@@ -327,7 +327,7 @@ async fn provision_workspace(
     // already includes every sibling agent in this project. This is what
     // wn_handoff(to_persona="frontend", …) consults to resolve the target
     // user_id without round-tripping through Worknest.
-    let personas_map = build_personas_map(state, depl.project_id).await?;
+    let (personas_map, peer_personas) = build_personas_map(state, depl.project_id).await?;
 
     // Render the workspace.
     let cfg = state.agents_config.clone();
@@ -338,6 +338,7 @@ async fn provision_workspace(
     let persona_for_provision = persona.clone();
     let jwt = token.token.clone();
     let map_for_provision = personas_map.clone();
+    let peers_for_provision = peer_personas.clone();
     let workspace_path = tokio::task::spawn_blocking(move || {
         super::workspace::provision(
             &depl_for_provision,
@@ -346,7 +347,10 @@ async fn provision_workspace(
             mcp_dir.as_deref(),
             &url,
             &jwt,
-            &map_for_provision,
+            &super::workspace::PersonaRoster {
+                by_slug: &map_for_provision,
+                all: &peers_for_provision,
+            },
         )
     })
     .await
@@ -611,30 +615,39 @@ pub async fn recover_stuck(state: ActivationState) {
 #[allow(dead_code)]
 fn _imports_used(_: &UserId) {}
 
-/// Build the project-shared `personas.json` map: every agent deployment in
-/// the project keyed by its persona slug. Run inside `provision_workspace`
-/// AFTER step 1 (RegisterIdentity) so the current deployment's
-/// `agent_user_id` is already non-NULL and lands in the map.
+/// Build the project's persona roster: the slug→user_id map (consumed by
+/// the MCP server's `wn_handoff` resolver) plus the full `Persona` records
+/// for every active deployment in the project. Run inside
+/// `provision_workspace` AFTER step 1 (RegisterIdentity) so the current
+/// deployment's `agent_user_id` is already non-NULL and lands in the map.
+///
+/// The full `Persona` list is what we render into each agent's `CLAUDE.md`
+/// as the "Peers in this project" section so the LLM can pick a real
+/// teammate slug when handing off or decomposing — without it, agents
+/// only see the hardcoded `<frontend|backend|...>` example string and
+/// route everything to those two.
 async fn build_personas_map(
     state: &ActivationState,
     project_id: ProjectId,
-) -> Result<HashMap<String, String>, ActivationError> {
+) -> Result<(HashMap<String, String>, Vec<Persona>), ActivationError> {
     let depl_repo = state.deployment_repo.clone();
     let persona_repo = state.persona_repo.clone();
-    let map = tokio::task::spawn_blocking(
-        move || -> Result<HashMap<String, String>, worknest_db::DbError> {
+    let result = tokio::task::spawn_blocking(
+        move || -> Result<(HashMap<String, String>, Vec<Persona>), worknest_db::DbError> {
             let mut map = HashMap::new();
+            let mut personas = Vec::new();
             for d in depl_repo.list_by_project(project_id)? {
                 let Some(uid) = d.agent_user_id else { continue };
                 if let Some(p) = worknest_db::Repository::find_by_id(&*persona_repo, d.persona_id)?
                 {
-                    map.insert(p.slug, uid.to_string());
+                    map.insert(p.slug.clone(), uid.to_string());
+                    personas.push(p);
                 }
             }
-            Ok(map)
+            Ok((map, personas))
         },
     )
     .await
     .map_err(|je| ActivationError::Auth(format!("blocking task: {je}")))??;
-    Ok(map)
+    Ok(result)
 }

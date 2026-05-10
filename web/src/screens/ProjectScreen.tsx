@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, List as ListIcon, Plus, Search, SquareStack } from "lucide-react";
+import { ArrowLeft, List as ListIcon, Pencil, Plus, Search, SquareStack } from "lucide-react";
 import {
   projectsApi,
+  tagsApi,
   ticketsApi,
   usersApi,
 } from "../lib/api";
@@ -18,7 +19,16 @@ import { Avatar, AvatarStack } from "../components/Avatar";
 import { projectCover, projectIcon } from "../lib/colors";
 import type { Priority, Ticket, TicketStatus } from "../lib/types";
 import { priorityLabel, statusLabel } from "../lib/types";
+import type { AppOutletContext } from "../components/AppLayout";
 import { useAuth } from "../state/auth";
+
+type DateRange = "week" | "overdue" | "next30";
+
+const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
+  { value: "week", label: "This week" },
+  { value: "overdue", label: "Overdue" },
+  { value: "next30", label: "Next 30 days" },
+];
 
 const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
   { value: "Open", label: statusLabel("Open") },
@@ -40,8 +50,7 @@ export function ProjectScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const ctx = useOutletContext<{ openCreateProject: () => void }>();
-  void ctx; // currently unused here, kept for parity
+  const ctx = useOutletContext<AppOutletContext>();
 
   const view = (searchParams.get("view") === "board" ? "board" : "list") as "list" | "board";
   const setView = (v: "list" | "board") => {
@@ -55,6 +64,8 @@ export function ProjectScreen() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateRange | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
@@ -78,6 +89,10 @@ export function ProjectScreen() {
     queryKey: ["users"],
     queryFn: () => usersApi.list(),
   });
+  const tagsQ = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => tagsApi.list(),
+  });
 
   const userMap = useMemo(
     () => new Map((usersQ.data ?? []).map((u) => [u.id, u])),
@@ -94,18 +109,44 @@ export function ProjectScreen() {
   const filtered = useMemo(() => {
     const all = ticketsQ.data ?? [];
     const q = search.trim().toLowerCase();
+    const now = Date.now();
+    const weekFromNow = now + 7 * 24 * 3600 * 1000;
+    const monthFromNow = now + 30 * 24 * 3600 * 1000;
     return all.filter((t) => {
       if (statusFilter && t.status !== statusFilter) return false;
       if (priorityFilter && t.priority !== priorityFilter) return false;
       if (assigneeFilter && t.assignee_id !== assigneeFilter) return false;
+      if (tagFilter && !t.tags.some((tg) => tg.id === tagFilter)) return false;
       if (mineOnly && t.assignee_id !== user?.id) return false;
+      if (dateFilter) {
+        const dueMs = t.due_date ? new Date(t.due_date).getTime() : null;
+        if (dateFilter === "overdue") {
+          if (dueMs === null || dueMs >= now || t.status === "Done" || t.status === "Closed") {
+            return false;
+          }
+        } else if (dateFilter === "week") {
+          if (dueMs === null || dueMs < now || dueMs > weekFromNow) return false;
+        } else if (dateFilter === "next30") {
+          if (dueMs === null || dueMs < now || dueMs > monthFromNow) return false;
+        }
+      }
       if (q) {
         const hay = `${t.title} ${t.id}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [ticketsQ.data, search, statusFilter, priorityFilter, assigneeFilter, mineOnly, user]);
+  }, [
+    ticketsQ.data,
+    search,
+    statusFilter,
+    priorityFilter,
+    assigneeFilter,
+    tagFilter,
+    dateFilter,
+    mineOnly,
+    user,
+  ]);
 
   const total = ticketsQ.data?.length ?? 0;
 
@@ -159,7 +200,17 @@ export function ProjectScreen() {
               {projectIcon(project.id)}
             </div>
             <div>
-              <h1>{project.name}</h1>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <h1 style={{ margin: 0 }}>{project.name}</h1>
+                <button
+                  type="button"
+                  className="btn ghost edit-inline"
+                  onClick={() => ctx.openEditProject(project)}
+                  title="Edit project"
+                >
+                  <Pencil size={12} /> Edit
+                </button>
+              </div>
               <p className="sub">
                 {project.description ?? "No description yet."}
               </p>
@@ -207,19 +258,38 @@ export function ProjectScreen() {
             options={memberUsers.map((u) => ({ value: u.id, label: u.username }))}
             onChange={setAssigneeFilter}
           />
+          <FilterChip
+            label="Label"
+            value={tagFilter}
+            options={(tagsQ.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
+            onChange={setTagFilter}
+          />
+          <FilterChip
+            label="Due"
+            value={dateFilter}
+            options={DATE_RANGE_OPTIONS}
+            onChange={setDateFilter}
+          />
           <ToggleChip
             label="My tickets"
             active={mineOnly}
             onChange={setMineOnly}
             variant="tint"
           />
-          {(statusFilter || priorityFilter || assigneeFilter || mineOnly) && (
+          {(statusFilter ||
+            priorityFilter ||
+            assigneeFilter ||
+            tagFilter ||
+            dateFilter ||
+            mineOnly) && (
             <button
               className="btn ghost"
               onClick={() => {
                 setStatusFilter(null);
                 setPriorityFilter(null);
                 setAssigneeFilter(null);
+                setTagFilter(null);
+                setDateFilter(null);
                 setMineOnly(false);
               }}
             >

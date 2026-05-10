@@ -284,7 +284,7 @@ mod tests {
     fn lists_seeded_personas() {
         let repo = setup();
         let personas = repo.list_all().unwrap();
-        assert_eq!(personas.len(), 9);
+        assert_eq!(personas.len(), 11);
         let slugs: Vec<&str> = personas.iter().map(|p| p.slug.as_str()).collect();
         for required in [
             "triage",
@@ -296,6 +296,8 @@ mod tests {
             "tech-lead",
             "frontend",
             "backend",
+            "architect",
+            "qa",
         ] {
             assert!(
                 slugs.contains(&required),

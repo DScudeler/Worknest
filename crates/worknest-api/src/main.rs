@@ -822,6 +822,11 @@ async fn get_project(
 struct CreateProjectRequest {
     name: String,
     description: Option<String>,
+    /// Optional cover-color hex string, e.g. `#fde68a`. Drives the project
+    /// banner / dashboard tile. Falls back to a deterministic per-id colour
+    /// when null.
+    #[serde(default)]
+    color: Option<String>,
     /// Optional source-repo location for the agents subsystem. Either an
     /// absolute filesystem path to an existing local repo, or a clone URL
     /// (`https://…`, `git@…`, `ssh://…`). Persisted as-is; validated only
@@ -851,6 +856,14 @@ async fn create_project(
 
     let mut project = Project::new(req.name, user.id);
     project.description = req.description;
+    project.color = req.color.and_then(|s| {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     project.repo_path = req.repo_path.and_then(|s| {
         let trimmed = s.trim();
         if trimmed.is_empty() {
@@ -887,6 +900,10 @@ struct UpdateProjectRequest {
     /// from older clients via serde alias.
     #[serde(alias = "is_archived")]
     archived: Option<bool>,
+    /// Set/clear the cover colour. Empty string clears (falls back to a
+    /// deterministic per-id colour at the UI layer).
+    #[serde(default)]
+    color: Option<String>,
     /// Set/clear the project's source-repo location. Empty string clears.
     #[serde(default)]
     repo_path: Option<String>,
@@ -922,6 +939,14 @@ async fn update_project(
     }
     if let Some(archived) = req.archived {
         project.archived = archived;
+    }
+    if let Some(c) = req.color {
+        let trimmed = c.trim().to_string();
+        project.color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        };
     }
     if let Some(rp) = req.repo_path {
         let trimmed = rp.trim().to_string();

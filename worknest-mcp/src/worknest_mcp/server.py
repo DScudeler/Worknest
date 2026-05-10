@@ -313,6 +313,53 @@ def wn_finish(
 
 
 @mcp.tool()
+def wn_create_ticket(
+    title: str,
+    description: str = "",
+    ticket_type: str = "bug",
+    priority: str = "medium",
+    assignee_persona: str | None = None,
+) -> dict[str, Any]:
+    """Create a new top-level ticket (no parent). If assignee_persona is
+    given, assigns the ticket to that persona's identity user; otherwise
+    leaves it unassigned for triage."""
+    if ticket_type.lower() not in TICKET_TYPES:
+        return {"ok": False, "error": f"bad ticket_type {ticket_type!r}"}
+    if priority.lower() not in PRIORITY_ORDER:
+        return {"ok": False, "error": f"bad priority {priority!r}"}
+    target_uid: str | None = None
+    if assignee_persona:
+        target_uid = _persona_to_user(assignee_persona)
+        if not target_uid:
+            return {"ok": False, "error": f"unknown persona {assignee_persona!r}"}
+
+    body_lines = [description] if description else []
+    body_lines.append(f"\nFiled by: {PERSONA}")
+    payload = {
+        "project_id": PROJECT_ID,
+        "title": title,
+        "description": "\n".join(body_lines),
+        "ticket_type": ticket_type.lower(),
+        "priority": priority.lower(),
+    }
+    with _client() as c:
+        r = c.post("/api/tickets", json=payload)
+        if r.status_code != 200:
+            return _err(r, "ticket:create")
+        new_ticket = r.json()
+        if target_uid:
+            ra = c.put(
+                f"/api/tickets/{new_ticket['id']}",
+                headers={"If-Match": new_ticket["updated_at"]},
+                json={"assignee_id": target_uid},
+            )
+            if ra.status_code != 200:
+                return _err(ra, "ticket:assign")
+            new_ticket = ra.json()
+    return {"ok": True, "ticket": new_ticket}
+
+
+@mcp.tool()
 def wn_create_subtask(
     parent_id: str,
     title: str,

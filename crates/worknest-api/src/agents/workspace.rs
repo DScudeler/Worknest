@@ -61,12 +61,60 @@ fn persona_definition(persona: &Persona) -> String {
     )
 }
 
+/// Render the "Peers in this project" Markdown section. Lists every other
+/// active deployment so the agent's LLM can pick a real teammate slug when
+/// handing off or decomposing an Epic — instead of guessing from the
+/// hardcoded `<frontend|backend|...>` example in its persona instructions.
+///
+/// `self_slug` is excluded because an agent should never hand off to itself.
+fn peers_section(peers: &[Persona], self_slug: &str) -> String {
+    let mut others: Vec<&Persona> = peers.iter().filter(|p| p.slug != self_slug).collect();
+    if others.is_empty() {
+        return "_No other personas are deployed in this project yet. \
+                If you need to hand off, comment on the ticket and leave the \
+                assignee unchanged._"
+            .to_string();
+    }
+    others.sort_by(|a, b| a.slug.cmp(&b.slug));
+    let mut out = String::from(
+        "Use a slug from this list when calling `wn_handoff(to_persona=...)`, \
+         `wn_create_subtask(assignee_persona=...)`, or any tool that takes a \
+         persona slug. Pick the persona whose role best matches the work — \
+         do not invent slugs.\n\n",
+    );
+    for p in others {
+        let expertise = if p.expertise.is_empty() {
+            String::new()
+        } else {
+            format!(" — _{}_", p.expertise.join(", "))
+        };
+        out.push_str(&format!(
+            "- **`{slug}`** {emoji} **{name}** ({role}){expertise}. {description}\n",
+            slug = p.slug,
+            emoji = p.emoji,
+            name = p.name,
+            role = p.role,
+            description = p.description,
+        ));
+    }
+    out
+}
+
 /// Provision (or re-provision) the workspace for a deployment. Idempotent:
 /// re-running rewrites all generated files from the current snapshot/template
 /// state and is safe at any point in the activation pipeline.
 ///
 /// `mcp_dir` and `worknest_url` come from `AgentsConfig`. `jwt` is the agent
 /// identity user's freshly minted token.
+/// Project-wide persona roster passed into [`provision`]. `by_slug` is the
+/// slug→user_id map serialized into `personas.json` for the MCP server's
+/// handoff resolver; `all` is the full `Persona` list rendered into the
+/// agent's `CLAUDE.md` so the LLM knows who its teammates are.
+pub struct PersonaRoster<'a> {
+    pub by_slug: &'a HashMap<String, String>,
+    pub all: &'a [Persona],
+}
+
 pub fn provision(
     deployment: &AgentDeployment,
     persona: &Persona,
@@ -74,7 +122,7 @@ pub fn provision(
     mcp_dir: Option<&Path>,
     worknest_url: &str,
     jwt: &str,
-    personas_map: &HashMap<String, String>,
+    roster: &PersonaRoster<'_>,
 ) -> Result<PathBuf, WorkspaceError> {
     let mcp_dir = mcp_dir.ok_or(WorkspaceError::McpDirMissing)?;
 
@@ -102,7 +150,7 @@ pub fn provision(
     std::fs::create_dir_all(&project_dir).map_err(io("create _projects dir"))?;
     let personas_path = project_dir.join("personas.json");
     let personas_json =
-        serde_json::to_string_pretty(personas_map).map_err(|e| WorkspaceError::Io {
+        serde_json::to_string_pretty(roster.by_slug).map_err(|e| WorkspaceError::Io {
             context: "serialize personas.json".into(),
             source: std::io::Error::other(e.to_string()),
         })?;
@@ -113,6 +161,7 @@ pub fn provision(
     vars.insert("persona_slug", persona.slug.clone());
     vars.insert("persona_name", persona.name.clone());
     vars.insert("persona_definition", persona_definition(persona));
+    vars.insert("peers", peers_section(roster.all, &persona.slug));
     vars.insert("project_id", project_id);
     vars.insert("worknest_url", worknest_url.to_string());
     vars.insert("deployment_id", deployment_id);
@@ -302,6 +351,27 @@ mod tests {
         }
     }
 
+    fn sample_peer(slug: &str, name: &str, role: &str, description: &str) -> Persona {
+        let now = Utc::now();
+        Persona {
+            id: PersonaId::new(),
+            slug: slug.into(),
+            name: name.into(),
+            emoji: "🛠️".into(),
+            color: "#bae6fd".into(),
+            description: description.into(),
+            role: role.into(),
+            tone: "Direct".into(),
+            expertise: vec!["x".into()],
+            instructions: "do work".into(),
+            capabilities: vec![Capability::Comment],
+            model: AgentModel::Sonnet,
+            default_cron: "*/30 * * * *".into(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     #[test]
     fn provisions_all_files() {
         let tmp = tempfile_dir();
@@ -310,6 +380,11 @@ mod tests {
         let depl = sample_deployment(persona.id);
         let mut personas_map = HashMap::new();
         personas_map.insert(persona.slug.clone(), uuid::Uuid::new_v4().to_string());
+        let peers = vec![
+            persona.clone(),
+            sample_peer("frontend", "Frontend Dev", "Frontend engineer", "UI work."),
+            sample_peer("backend", "Backend Dev", "Backend engineer", "API work."),
+        ];
         let dir = provision(
             &depl,
             &persona,
@@ -317,7 +392,10 @@ mod tests {
             Some(&mcp),
             "http://localhost:3000",
             "fake.jwt.token",
-            &personas_map,
+            &PersonaRoster {
+                by_slug: &personas_map,
+                all: &peers,
+            },
         )
         .unwrap();
 
@@ -362,6 +440,17 @@ mod tests {
         let claude_md = std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
         assert!(claude_md.contains("Tech Lead"));
         assert!(claude_md.contains(&depl.project_id.to_string()));
+        // Peers section: lists every other deployed persona by slug, but
+        // never the agent's own slug (no self-handoff).
+        assert!(claude_md.contains("Peers in this project"));
+        assert!(claude_md.contains("`frontend`"));
+        assert!(claude_md.contains("`backend`"));
+        assert!(
+            !claude_md
+                .lines()
+                .any(|l| l.starts_with(&format!("- **`{}`**", persona.slug))),
+            "self slug must not appear as a Peers list entry"
+        );
 
         let mcp_json = std::fs::read_to_string(dir.join(".mcp.json")).unwrap();
         assert!(mcp_json.contains(&mcp.display().to_string()));

@@ -17,17 +17,23 @@ const ICONS = [
 interface Props {
   open: boolean;
   onClose: () => void;
+  /// When set, the modal opens in edit mode pre-populated from this project.
+  /// Title becomes `Edit <name>`, the primary CTA on step 2 becomes
+  /// `Save changes`, and a destructive `Archive project` button appears on
+  /// step 1.
+  project?: Project | null;
 }
 
-export function CreateProjectModal({ open, onClose }: Props) {
+export function CreateProjectModal({ open, onClose, project }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const isEdit = !!project;
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [color, setColor] = useState<string>(COVERS[0]);
-  // icon is currently a UI-only choice — backend doesn't store it yet (Phase 7+).
+  // icon is currently a UI-only choice — backend doesn't store it yet.
   const [icon, setIcon] = useState<string>(ICONS[0]);
   const [invitees, setInvitees] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -37,25 +43,56 @@ export function CreateProjectModal({ open, onClose }: Props) {
     queryFn: () => usersApi.list(),
     enabled: open,
   });
+  const { data: existingMembers } = useQuery({
+    queryKey: ["project", project?.id, "members"],
+    queryFn: () => projectsApi.members(project!.id),
+    enabled: open && isEdit,
+  });
 
+  // Reset / re-seed when the modal opens or the editing target changes.
+  // Keyed on project?.id (not the project object) so unrelated parent re-renders
+  // don't blow away in-progress edits.
   useEffect(() => {
     if (!open) {
       setStep(1);
+      setError(null);
+      return;
+    }
+    if (isEdit && project) {
+      setName(project.name);
+      setDescription(project.description ?? "");
+      setRepoPath(project.repo_path ?? "");
+      setColor(project.color ?? COVERS[0]);
+      setIcon(ICONS[0]);
+    } else {
       setName("");
       setDescription("");
       setRepoPath("");
       setColor(COVERS[0]);
       setIcon(ICONS[0]);
       setInvitees(new Set());
-      setError(null);
     }
-  }, [open]);
+    setError(null);
+    // Intentionally key on `project?.id` only, not the full `project` object.
+    // The parent's `project` reference can change on every render even when
+    // the user is mid-edit; including it would clobber unsaved input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isEdit, project?.id]);
+
+  // Sync invitees once member data actually arrives in edit mode.
+  // Kept separate so the invitees set isn't re-derived from a fresh `[]`
+  // default on every render — that was clobbering form input.
+  useEffect(() => {
+    if (!open || !isEdit || !existingMembers) return;
+    setInvitees(new Set(existingMembers.map((m) => m.user_id)));
+  }, [open, isEdit, existingMembers]);
 
   const createMut = useMutation({
     mutationFn: async () => {
-      const project = await projectsApi.create({
+      const created = await projectsApi.create({
         name,
         description: description || undefined,
+        color,
         repo_path: repoPath.trim() || undefined,
       });
       // V4 migration: owner is auto-added; invite the others.
@@ -63,16 +100,16 @@ export function CreateProjectModal({ open, onClose }: Props) {
         Array.from(invitees)
           .filter((id) => id !== user?.id)
           .map((uid) =>
-            projectsApi.addMember(project.id, { user_id: uid, role: "member" }).catch(() => {
+            projectsApi.addMember(created.id, { user_id: uid, role: "member" }).catch(() => {
               /* swallow individual invite failures so the project still creates */
             }),
           ),
       );
-      return project;
+      return created;
     },
-    onSuccess: (project: Project) => {
+    onSuccess: (created: Project) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
-      toast.success(`Project '${project.name}' created`);
+      toast.success(`Project '${created.name}' created`);
       onClose();
     },
     onError: (err: unknown) => {
@@ -80,32 +117,112 @@ export function CreateProjectModal({ open, onClose }: Props) {
     },
   });
 
+  const updateMut = useMutation({
+    mutationFn: async () => {
+      if (!project) throw new Error("No project to update");
+      const updated = await projectsApi.update(project.id, {
+        name,
+        description: description || null,
+        color: color || null,
+        repo_path: repoPath.trim() || null,
+      });
+      // Sync members: add newly-checked, remove newly-unchecked. Owner stays
+      // (the API does not let the owner be removed via this endpoint anyway).
+      const before = new Set((existingMembers ?? []).map((m) => m.user_id));
+      const after = invitees;
+      await Promise.all([
+        ...Array.from(after)
+          .filter((id) => id !== user?.id && !before.has(id))
+          .map((uid) =>
+            projectsApi
+              .addMember(project.id, { user_id: uid, role: "member" })
+              .catch(() => {}),
+          ),
+        ...Array.from(before)
+          .filter((id) => id !== project.created_by && !after.has(id))
+          .map((uid) => projectsApi.removeMember(project.id, uid).catch(() => {})),
+      ]);
+      return updated;
+    },
+    onSuccess: (updated: Project) => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", updated.id] });
+      qc.invalidateQueries({ queryKey: ["project", updated.id, "members"] });
+      toast.success(`Project '${updated.name}' updated`);
+      onClose();
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : "Could not update project");
+    },
+  });
+
+  const archiveMut = useMutation({
+    mutationFn: () => projectsApi.archive(project!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", project!.id] });
+      toast.success(`Project '${project!.name}' archived`);
+      onClose();
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : "Could not archive project");
+    },
+  });
+
   const previewProject: Project = useMemo(
     () => ({
-      id: "preview",
+      id: project?.id ?? "preview",
       name: name || "New project",
       description: description || "Describe what this project is for.",
       color,
-      archived: false,
-      created_by: user?.id ?? "preview",
+      archived: project?.archived ?? false,
+      created_by: project?.created_by ?? user?.id ?? "preview",
       repo_path: repoPath.trim() || null,
-      created_at: new Date().toISOString(),
+      created_at: project?.created_at ?? new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }),
-    [name, description, repoPath, color, user],
+    [name, description, repoPath, color, user, project],
   );
 
   const peopleMinusMe = people.filter((p) => p.id !== user?.id);
+  const submitPending = createMut.isPending || updateMut.isPending || archiveMut.isPending;
+
+  const handlePrimary = () => {
+    if (isEdit) updateMut.mutate();
+    else createMut.mutate();
+  };
+  const handleArchive = () => {
+    if (!project) return;
+    if (window.confirm(`Archive project '${project.name}'? This hides it from the dashboard. You can unarchive later.`)) {
+      archiveMut.mutate();
+    }
+  };
+
+  const titleText = isEdit ? `Edit ${project?.name ?? "project"}` : "New project";
+  const subtitleText =
+    step === 1
+      ? `Step 1 of 2 · Details`
+      : `Step 2 of 2 · Members`;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={step === 1 ? "New project" : "Invite teammates"}
-      subtitle={step === 1 ? "Step 1 of 2 · Details" : "Step 2 of 2 · Members"}
+      title={titleText}
+      subtitle={subtitleText}
       foot={
         step === 1 ? (
           <>
+            {isEdit ? (
+              <button
+                className="btn ghost danger"
+                onClick={handleArchive}
+                disabled={submitPending}
+                style={{ marginRight: "auto" }}
+              >
+                Archive project
+              </button>
+            ) : null}
             <button className="btn ghost" onClick={onClose}>
               Cancel
             </button>
@@ -124,10 +241,16 @@ export function CreateProjectModal({ open, onClose }: Props) {
             </button>
             <button
               className="btn primary"
-              onClick={() => createMut.mutate()}
-              disabled={createMut.isPending}
+              onClick={handlePrimary}
+              disabled={submitPending}
             >
-              {createMut.isPending ? "Creating…" : "✓ Create project"}
+              {submitPending
+                ? isEdit
+                  ? "Saving…"
+                  : "Creating…"
+                : isEdit
+                  ? "✓ Save changes"
+                  : "✓ Create project"}
             </button>
           </>
         )
@@ -218,7 +341,9 @@ export function CreateProjectModal({ open, onClose }: Props) {
       ) : (
         <div className="flex-col" style={{ gap: 6 }}>
           <p className="muted" style={{ marginTop: 0 }}>
-            Invite teammates to collaborate. You can change this later.
+            {isEdit
+              ? "Manage who can collaborate on this project."
+              : "Invite teammates to collaborate. You can change this later."}
           </p>
           {peopleMinusMe.length === 0 ? (
             <p className="muted">No other users in your workspace yet.</p>
