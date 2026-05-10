@@ -411,6 +411,7 @@ async fn bootstrap_worktree(
 
     let project_id_str = depl.project_id.to_string();
     let persona_slug = persona.slug.clone();
+    let instance_index = depl.instance_index;
     let workspace_pb_for_bootstrap = workspace_pb.clone();
     let agents_dir_for_bootstrap = agents_dir.clone();
 
@@ -419,6 +420,7 @@ async fn bootstrap_worktree(
             repo_path.as_deref(),
             &project_id_str,
             &persona_slug,
+            instance_index,
             &workspace_pb_for_bootstrap,
             &agents_dir_for_bootstrap,
         )

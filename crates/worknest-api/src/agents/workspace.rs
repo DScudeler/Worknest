@@ -346,6 +346,7 @@ mod tests {
             touched_this_week: 0,
             success_rate: 0.0,
             last_activity_at: None,
+            instance_index: 1,
             created_at: now,
             updated_at: now,
         }

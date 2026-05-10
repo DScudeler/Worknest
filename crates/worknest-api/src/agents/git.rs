@@ -2,8 +2,11 @@
 //!
 //! Each project has a single "canonical" checkout (cloned once into
 //! `<AGENTS_DIR>/_projects/<pid>/repo`, or the operator-supplied local path
-//! used directly). Each deployment's workspace dir IS its own git worktree
-//! on branch `swarm/<persona-slug>`, sharing `.git/` with the canonical.
+//! used directly). Each deployment's workspace dir IS its own git worktree,
+//! sharing `.git/` with the canonical. The branch name is
+//! `swarm/<persona-slug>` for the first instance of a persona and
+//! `swarm/<persona-slug>-<n>` for sibling instances (n ≥ 2) so multiple
+//! deployments of the same persona can coexist as parallel worktrees.
 //!
 //! `repo_path == None` is a no-op aside from `mkdir -p <workspace>`: agents
 //! that don't write code (Triage, Standup, Docs Writer, …) skip the worktree
@@ -148,6 +151,7 @@ pub fn bootstrap(
     project_repo_path: Option<&str>,
     project_id: &str,
     persona_slug: &str,
+    instance_index: i32,
     workspace: &Path,
     agents_dir: &Path,
 ) -> Result<Option<BootstrapOutcome>, GitError> {
@@ -161,7 +165,15 @@ pub fn bootstrap(
         return Ok(None);
     };
     let canonical = resolve_canonical(rp, project_id, agents_dir)?;
-    let branch = format!("swarm/{persona_slug}");
+    // Instance 1 keeps the legacy `swarm/<slug>` name so existing
+    // deployments from before V11 don't need re-bootstrapping. Sibling
+    // instances get a `-<n>` suffix to avoid the worktree-shares-branch
+    // collision that git rejects.
+    let branch = if instance_index <= 1 {
+        format!("swarm/{persona_slug}")
+    } else {
+        format!("swarm/{persona_slug}-{instance_index}")
+    };
 
     // Already bootstrapped → no-op.
     if workspace.join(".git").exists() {

@@ -2347,18 +2347,11 @@ async fn deploy_persona(
         .unwrap_or_else(|| persona.default_cron.clone());
     validate_cron_5_field(&cron_expression)?;
 
-    // Reject if a deployment already exists (idempotent: return the existing
-    // row in 409). The UNIQUE constraint also enforces this.
-    let drepo = state.deployment_repo.clone();
-    if let Some(existing) =
-        db(move || drepo.find_by_project_and_persona(project_id, persona_id)).await?
-    {
-        return Err(AppError::BadRequest(format!(
-            "Persona '{}' is already deployed to project {} (deployment {})",
-            persona.slug, project_id, existing.id
-        )));
-    }
-
+    // Multiple deployments of the same (project, persona) are intentional:
+    // they share `agent_user_id` and absorb load via the existing
+    // optimistic-concurrency claim race in `wn_claim_ticket`. The repo's
+    // `create()` auto-assigns `instance_index = MAX + 1` so the per-instance
+    // git worktree branch (`swarm/<slug>-<n>`) doesn't collide.
     let now = chrono::Utc::now();
     let deployment = AgentDeployment {
         id: AgentDeploymentId::new(),
@@ -2387,6 +2380,7 @@ async fn deploy_persona(
         touched_this_week: 0,
         success_rate: 0.0,
         last_activity_at: None,
+        instance_index: 0, // ignored — repo auto-assigns via subquery
         created_at: now,
         updated_at: now,
     };

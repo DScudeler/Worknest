@@ -429,7 +429,14 @@ function DeploymentsTab({ loading, onOpenRun }: DeploymentsTabProps) {
                     <span style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                       <AgentAvatar emoji={d.persona.emoji} color={d.persona.color} size="sm" />
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                        <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.persona.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                          {d.persona.name}
+                          {d.instance_index > 1 ? (
+                            <span style={{ marginLeft: 6, color: "var(--text-3)", fontWeight: 500 }}>
+                              #{d.instance_index}
+                            </span>
+                          ) : null}
+                        </div>
                         <div style={{ fontSize: 11.5, color: "var(--text-3)" }}>{d.persona.role}</div>
                       </span>
                     </span>

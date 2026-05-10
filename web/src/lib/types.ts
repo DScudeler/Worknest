@@ -383,6 +383,12 @@ export interface AgentDeployment {
   touched_this_week: number;
   success_rate: number;
   last_activity_at: string | null;
+  /// 1-based index among sibling deployments of the same (project, persona).
+  /// All instances share `agent_user_id`, so they self-distribute work via
+  /// the optimistic-concurrency claim race in `wn_claim_ticket`. The index
+  /// only disambiguates the per-instance git branch (`swarm/<slug>` for 1,
+  /// `swarm/<slug>-<n>` for ≥2) and is shown in the UI as a `#N` suffix.
+  instance_index: number;
   created_at: string;
   updated_at: string;
 }

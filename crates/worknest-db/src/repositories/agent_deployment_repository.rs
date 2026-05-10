@@ -23,7 +23,7 @@ const COLUMNS: &str = "id, project_id, persona_id, agent_user_id, \
                        workspace_path, cron_expression, next_tick_at, tick_locked_at, tick_lock_token, \
                        status, last_error_step, error_message, error_count, current_ticket_id, \
                        runs_today, touched_this_week, success_rate, last_activity_at, \
-                       created_at, updated_at";
+                       instance_index, created_at, updated_at";
 
 pub struct AgentDeploymentRepository {
     pool: Arc<DbPool>,
@@ -115,8 +115,9 @@ fn row_to_deployment(row: &Row) -> rusqlite::Result<AgentDeployment> {
     let success_rate: f64 = row.get(24)?;
     let last_activity_at = parse_dt_opt(row, 25)?;
 
-    let created_at_str: String = row.get(26)?;
-    let updated_at_str: String = row.get(27)?;
+    let instance_index: i32 = row.get(26)?;
+    let created_at_str: String = row.get(27)?;
+    let updated_at_str: String = row.get(28)?;
 
     let map_err = |e: worknest_core::CoreError| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
@@ -158,6 +159,7 @@ fn row_to_deployment(row: &Row) -> rusqlite::Result<AgentDeployment> {
         touched_this_week,
         success_rate: success_rate as f32,
         last_activity_at,
+        instance_index,
         created_at: parse_datetime(&created_at_str)?,
         updated_at: parse_datetime(&updated_at_str)?,
     })
@@ -200,28 +202,35 @@ impl AgentDeploymentRepository {
         Ok(rows)
     }
 
-    pub fn find_by_project_and_persona(
+    /// All deployments of a given persona within a project. Multiple rows
+    /// are expected when an operator scales a persona ("3× Backend Dev").
+    /// Ordered by `instance_index` ascending.
+    pub fn list_by_project_and_persona(
         &self,
         project_id: ProjectId,
         persona_id: PersonaId,
-    ) -> Result<Option<AgentDeployment>> {
+    ) -> Result<Vec<AgentDeployment>> {
         let conn = self
             .pool
             .get()
             .map_err(|e| DbError::Connection(e.to_string()))?;
         let sql = format!(
-            "SELECT {COLUMNS} FROM agent_deployments WHERE project_id = ?1 AND persona_id = ?2"
+            "SELECT {COLUMNS} FROM agent_deployments \
+             WHERE project_id = ?1 AND persona_id = ?2 \
+             ORDER BY instance_index ASC"
         );
-        let row = conn
+        let mut stmt = conn
             .prepare(&sql)
-            .map_err(|e| DbError::Query(e.to_string()))?
-            .query_row(
+            .map_err(|e| DbError::Query(e.to_string()))?;
+        let rows = stmt
+            .query_map(
                 params![project_id.to_string(), persona_id.to_string()],
                 row_to_deployment,
             )
-            .optional()
+            .map_err(|e| DbError::Query(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| DbError::Query(e.to_string()))?;
-        Ok(row)
+        Ok(rows)
     }
 
     /// Guarded status transition. Returns `true` iff one row was changed.
@@ -551,70 +560,79 @@ impl Repository<AgentDeployment, AgentDeploymentId> for AgentDeploymentRepositor
         Ok(rows)
     }
 
+    /// Insert a deployment row, auto-assigning `instance_index` to
+    /// `MAX(instance_index) + 1` for sibling rows with the same
+    /// `(project_id, persona_id)`. The subquery executes inside the same
+    /// INSERT statement, so SQLite's writer serialization makes the read
+    /// and the write atomic across pool connections — no transaction
+    /// needed. The caller's `e.instance_index` is ignored; the assigned
+    /// value is returned via `RETURNING`.
     fn create(&self, e: &AgentDeployment) -> Result<AgentDeployment> {
         let conn = self
             .pool
             .get()
             .map_err(|e| DbError::Connection(e.to_string()))?;
-        conn.execute(
-            "INSERT INTO agent_deployments (
-                id, project_id, persona_id, agent_user_id,
-                snapshot_name, snapshot_role, snapshot_tone, snapshot_expertise_json,
-                snapshot_instructions, snapshot_capabilities_json, snapshot_model, snapshot_taken_at,
-                workspace_path, cron_expression, next_tick_at, tick_locked_at, tick_lock_token,
-                status, last_error_step, error_message, error_count, current_ticket_id,
-                runs_today, touched_this_week, success_rate, last_activity_at,
-                created_at, updated_at
-             ) VALUES (
-                ?1, ?2, ?3, ?4,
-                ?5, ?6, ?7, ?8,
-                ?9, ?10, ?11, ?12,
-                ?13, ?14, ?15, ?16, ?17,
-                ?18, ?19, ?20, ?21, ?22,
-                ?23, ?24, ?25, ?26,
-                ?27, ?28
-             )",
-            params![
-                e.id.to_string(),
-                e.project_id.to_string(),
-                e.persona_id.to_string(),
-                e.agent_user_id.map(|u| u.to_string()),
-                e.snapshot_name,
-                e.snapshot_role,
-                e.snapshot_tone,
-                exp_to_json(&e.snapshot_expertise),
-                e.snapshot_instructions,
-                caps_to_json(&e.snapshot_capabilities),
-                e.snapshot_model.as_ref().map(model_to_str),
-                e.snapshot_taken_at.map(|d| d.to_rfc3339()),
-                e.workspace_path,
-                e.cron_expression,
-                e.next_tick_at.map(|d| d.to_rfc3339()),
-                e.tick_locked_at.map(|d| d.to_rfc3339()),
-                e.tick_lock_token,
-                e.status.to_string(),
-                e.last_error_step.as_ref().map(|s| s.to_string()),
-                e.error_message,
-                e.error_count,
-                e.current_ticket_id.map(|t| t.to_string()),
-                e.runs_today,
-                e.touched_this_week,
-                e.success_rate as f64,
-                e.last_activity_at.map(|d| d.to_rfc3339()),
-                e.created_at.to_rfc3339(),
-                e.updated_at.to_rfc3339(),
-            ],
-        )
-        .map_err(|err| {
-            if err.to_string().contains("UNIQUE constraint failed") {
-                DbError::ConstraintViolation(
-                    "Deployment for this project + persona already exists".into(),
-                )
-            } else {
-                DbError::Query(err.to_string())
-            }
-        })?;
-        Ok(e.clone())
+        let assigned: i32 = conn
+            .query_row(
+                "INSERT INTO agent_deployments (
+                    id, project_id, persona_id, agent_user_id,
+                    snapshot_name, snapshot_role, snapshot_tone, snapshot_expertise_json,
+                    snapshot_instructions, snapshot_capabilities_json, snapshot_model, snapshot_taken_at,
+                    workspace_path, cron_expression, next_tick_at, tick_locked_at, tick_lock_token,
+                    status, last_error_step, error_message, error_count, current_ticket_id,
+                    runs_today, touched_this_week, success_rate, last_activity_at,
+                    instance_index, created_at, updated_at
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4,
+                    ?5, ?6, ?7, ?8,
+                    ?9, ?10, ?11, ?12,
+                    ?13, ?14, ?15, ?16, ?17,
+                    ?18, ?19, ?20, ?21, ?22,
+                    ?23, ?24, ?25, ?26,
+                    COALESCE(
+                        (SELECT MAX(instance_index) FROM agent_deployments
+                         WHERE project_id = ?2 AND persona_id = ?3),
+                        0
+                    ) + 1,
+                    ?27, ?28
+                 )
+                 RETURNING instance_index",
+                params![
+                    e.id.to_string(),
+                    e.project_id.to_string(),
+                    e.persona_id.to_string(),
+                    e.agent_user_id.map(|u| u.to_string()),
+                    e.snapshot_name,
+                    e.snapshot_role,
+                    e.snapshot_tone,
+                    exp_to_json(&e.snapshot_expertise),
+                    e.snapshot_instructions,
+                    caps_to_json(&e.snapshot_capabilities),
+                    e.snapshot_model.as_ref().map(model_to_str),
+                    e.snapshot_taken_at.map(|d| d.to_rfc3339()),
+                    e.workspace_path,
+                    e.cron_expression,
+                    e.next_tick_at.map(|d| d.to_rfc3339()),
+                    e.tick_locked_at.map(|d| d.to_rfc3339()),
+                    e.tick_lock_token,
+                    e.status.to_string(),
+                    e.last_error_step.as_ref().map(|s| s.to_string()),
+                    e.error_message,
+                    e.error_count,
+                    e.current_ticket_id.map(|t| t.to_string()),
+                    e.runs_today,
+                    e.touched_this_week,
+                    e.success_rate as f64,
+                    e.last_activity_at.map(|d| d.to_rfc3339()),
+                    e.created_at.to_rfc3339(),
+                    e.updated_at.to_rfc3339(),
+                ],
+                |r| r.get(0),
+            )
+            .map_err(|err| DbError::Query(err.to_string()))?;
+        let mut out = e.clone();
+        out.instance_index = assigned;
+        Ok(out)
     }
 
     fn update(&self, _e: &AgentDeployment) -> Result<AgentDeployment> {
@@ -721,22 +739,41 @@ mod tests {
             touched_this_week: 0,
             success_rate: 0.0,
             last_activity_at: None,
+            instance_index: 0, // ignored by create(); auto-assigned via subquery
             created_at: now,
             updated_at: now,
         }
     }
 
     #[test]
-    fn unique_project_persona_constraint() {
+    fn create_auto_assigns_instance_index() {
         let (pool, depl, proj, user) = setup();
         let owner = make_user(&user, "alice");
         let p = make_project(&proj, &owner);
         let persona_id = seed_persona_id(&pool);
+
+        // First deployment of (project, persona) gets index 1.
         let d1 = new_deployment(p.id, persona_id);
-        depl.create(&d1).unwrap();
+        let stored1 = depl.create(&d1).unwrap();
+        assert_eq!(stored1.instance_index, 1);
+        assert_eq!(
+            depl.find_by_id(d1.id).unwrap().unwrap().instance_index,
+            1,
+            "instance_index 1 should round-trip through the row mapper"
+        );
+
+        // Second deployment of the SAME (project, persona) is allowed and
+        // gets index 2 — the V11 migration removed the unique constraint.
         let d2 = new_deployment(p.id, persona_id);
-        let r = depl.create(&d2);
-        assert!(matches!(r, Err(DbError::ConstraintViolation(_))));
+        let stored2 = depl.create(&d2).unwrap();
+        assert_eq!(stored2.instance_index, 2);
+        assert_ne!(d1.id, d2.id);
+
+        // list_by_project_and_persona surfaces both, ordered by index.
+        let listed = depl.list_by_project_and_persona(p.id, persona_id).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].instance_index, 1);
+        assert_eq!(listed[1].instance_index, 2);
     }
 
     #[test]

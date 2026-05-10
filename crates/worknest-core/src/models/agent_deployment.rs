@@ -181,6 +181,14 @@ pub struct AgentDeployment {
     pub persona_id: PersonaId,
     pub agent_user_id: Option<UserId>,
 
+    /// 1-based index among sibling deployments of the same `(project, persona)`.
+    /// All instances share `agent_user_id`, so work distributes via the
+    /// optimistic-concurrency `wn_claim_ticket` race; the index exists only to
+    /// disambiguate the per-instance git worktree branch
+    /// (`swarm/<slug>` for index 1, `swarm/<slug>-<n>` for ≥2) and to label the
+    /// row in the UI ("Backend Dev #2").
+    pub instance_index: i32,
+
     pub snapshot_name: Option<String>,
     pub snapshot_role: Option<String>,
     pub snapshot_tone: Option<String>,
