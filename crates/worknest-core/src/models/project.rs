@@ -8,6 +8,7 @@ use super::user::UserId;
 
 /// Project identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {
@@ -50,6 +51,13 @@ pub struct Project {
     pub color: Option<String>,
     pub archived: bool,
     pub created_by: UserId,
+    /// Optional source-repo location for the agents subsystem. Either an
+    /// absolute filesystem path to an existing local repo, or a clone URL
+    /// (https://, ssh://, git@). When `None` the BootstrapWorktree
+    /// activation step is a no-op and the agent runs without a code
+    /// checkout — fine for non-code personas (triage, docs, standup, …).
+    #[serde(default)]
+    pub repo_path: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -65,6 +73,7 @@ impl Project {
             color: None,
             archived: false,
             created_by,
+            repo_path: None,
             created_at: now,
             updated_at: now,
         }

@@ -1,9 +1,8 @@
 //! Project repository implementation
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension, Row};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use worknest_core::models::{Project, ProjectId, UserId};
 
@@ -29,7 +28,7 @@ impl ProjectRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, color, archived, created_by, created_at, updated_at
+                "SELECT id, name, description, color, archived, created_by, created_at, updated_at, repo_path
                  FROM projects WHERE created_by = ?1 ORDER BY name",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -52,7 +51,7 @@ impl ProjectRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, color, archived, created_by, created_at, updated_at
+                "SELECT id, name, description, color, archived, created_by, created_at, updated_at, repo_path
                  FROM projects WHERE archived = 0 ORDER BY name",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -75,7 +74,7 @@ impl ProjectRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, color, archived, created_by, created_at, updated_at
+                "SELECT id, name, description, color, archived, created_by, created_at, updated_at, repo_path
                  FROM projects WHERE archived = 1 ORDER BY name",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -112,6 +111,133 @@ impl ProjectRepository {
             .ok_or_else(|| DbError::NotFound("Project not found after archive".to_string()))
     }
 
+    /// Add a user as a member of a project. Idempotent: re-inserting an
+    /// existing (project, user) pair refreshes the role and `added_at`.
+    pub fn add_member(&self, project_id: ProjectId, user_id: UserId, role: &str) -> Result<()> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        conn.execute(
+            "INSERT INTO project_members (project_id, user_id, role, added_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(project_id, user_id) DO UPDATE SET
+                role = excluded.role,
+                added_at = excluded.added_at",
+            params![
+                project_id.0.to_string(),
+                user_id.0.to_string(),
+                role,
+                Utc::now().to_rfc3339(),
+            ],
+        )
+        .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Whether `user_id` is a member of `project_id` (any role, including
+    /// implicit owner-as-member rows backfilled by V4).
+    pub fn is_member(&self, project_id: ProjectId, user_id: UserId) -> Result<bool> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_members
+                 WHERE project_id = ?1 AND user_id = ?2",
+                params![project_id.0.to_string(), user_id.0.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(count > 0)
+    }
+
+    /// List all (user_id, role) pairs for a project, ordered by added_at.
+    pub fn list_members(&self, project_id: ProjectId) -> Result<Vec<(UserId, String)>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT user_id, role FROM project_members
+                 WHERE project_id = ?1 ORDER BY added_at",
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![project_id.0.to_string()], |row| {
+                let uid_str: String = row.get(0)?;
+                let role: String = row.get(1)?;
+                Ok((uid_str, role))
+            })
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            let (uid_str, role) = r.map_err(|e| DbError::Query(e.to_string()))?;
+            let uid =
+                UserId::from_uuid(parse_uuid(&uid_str).map_err(|e| {
+                    DbError::Query(format!("invalid user id in project_members: {e}"))
+                })?);
+            out.push((uid, role));
+        }
+        Ok(out)
+    }
+
+    /// Remove a member from a project. Returns true if a row was deleted.
+    pub fn remove_member(&self, project_id: ProjectId, user_id: UserId) -> Result<bool> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let rows = conn
+            .execute(
+                "DELETE FROM project_members
+                 WHERE project_id = ?1 AND user_id = ?2",
+                params![project_id.0.to_string(), user_id.0.to_string()],
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(rows > 0)
+    }
+
+    /// Find every project visible to `user_id`: those they own (`created_by`)
+    /// OR those they are a member of. Replaces the previous in-memory filter
+    /// in `list_projects`.
+    pub fn find_visible_to(&self, user_id: UserId) -> Result<Vec<Project>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT p.id, p.name, p.description, p.color, p.archived,
+                                 p.created_by, p.created_at, p.updated_at, p.repo_path
+                 FROM projects p
+                 LEFT JOIN project_members pm ON pm.project_id = p.id
+                 WHERE p.created_by = ?1 OR pm.user_id = ?1
+                 ORDER BY p.name",
+            )
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        let projects = stmt
+            .query_map(params![user_id.0.to_string()], row_to_project)
+            .map_err(|e| DbError::Query(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| DbError::Query(e.to_string()))?;
+
+        Ok(projects)
+    }
+
     /// Unarchive a project
     pub fn unarchive(&self, project_id: ProjectId) -> Result<()> {
         let conn = self
@@ -143,7 +269,7 @@ impl Repository<Project, ProjectId> for ProjectRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, color, archived, created_by, created_at, updated_at
+                "SELECT id, name, description, color, archived, created_by, created_at, updated_at, repo_path
                  FROM projects WHERE id = ?1",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -164,7 +290,7 @@ impl Repository<Project, ProjectId> for ProjectRepository {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, color, archived, created_by, created_at, updated_at
+                "SELECT id, name, description, color, archived, created_by, created_at, updated_at, repo_path
                  FROM projects ORDER BY name",
             )
             .map_err(|e| DbError::Query(e.to_string()))?;
@@ -185,8 +311,8 @@ impl Repository<Project, ProjectId> for ProjectRepository {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         conn.execute(
-            "INSERT INTO projects (id, name, description, color, archived, created_by, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO projects (id, name, description, color, archived, created_by, created_at, updated_at, repo_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 entity.id.0.to_string(),
                 entity.name,
@@ -196,6 +322,7 @@ impl Repository<Project, ProjectId> for ProjectRepository {
                 entity.created_by.0.to_string(),
                 entity.created_at.to_rfc3339(),
                 entity.updated_at.to_rfc3339(),
+                entity.repo_path,
             ],
         )
         .map_err(|e| DbError::Query(e.to_string()))?;
@@ -211,13 +338,14 @@ impl Repository<Project, ProjectId> for ProjectRepository {
 
         let rows_affected = conn
             .execute(
-                "UPDATE projects SET name = ?1, description = ?2, color = ?3, archived = ?4, updated_at = ?5
-                 WHERE id = ?6",
+                "UPDATE projects SET name = ?1, description = ?2, color = ?3, archived = ?4, repo_path = ?5, updated_at = ?6
+                 WHERE id = ?7",
                 params![
                     entity.name,
                     entity.description,
                     entity.color,
                     if entity.archived { 1 } else { 0 },
+                    entity.repo_path,
                     Utc::now().to_rfc3339(),
                     entity.id.0.to_string(),
                 ],
@@ -252,25 +380,25 @@ impl Repository<Project, ProjectId> for ProjectRepository {
     }
 }
 
+use super::{parse_datetime, parse_uuid};
+
 /// Convert a database row to a Project
 fn row_to_project(row: &Row) -> rusqlite::Result<Project> {
     let id_str: String = row.get(0)?;
-    let id = ProjectId::from_uuid(Uuid::parse_str(&id_str).unwrap());
+    let id = ProjectId::from_uuid(parse_uuid(&id_str)?);
 
     let created_by_str: String = row.get(5)?;
-    let created_by = UserId::from_uuid(Uuid::parse_str(&created_by_str).unwrap());
+    let created_by = UserId::from_uuid(parse_uuid(&created_by_str)?);
 
     let created_at_str: String = row.get(6)?;
-    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let created_at = parse_datetime(&created_at_str)?;
 
     let updated_at_str: String = row.get(7)?;
-    let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-        .unwrap()
-        .with_timezone(&Utc);
+    let updated_at = parse_datetime(&updated_at_str)?;
 
     let archived: i32 = row.get(4)?;
+
+    let repo_path: Option<String> = row.get(8)?;
 
     Ok(Project {
         id,
@@ -279,6 +407,7 @@ fn row_to_project(row: &Row) -> rusqlite::Result<Project> {
         color: row.get(3)?,
         archived: archived == 1,
         created_by,
+        repo_path,
         created_at,
         updated_at,
     })

@@ -9,7 +9,8 @@ use crate::error::{CoreError, Result};
 
 /// Unique identifier for attachments
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct AttachmentId(Uuid);
+#[serde(transparent)]
+pub struct AttachmentId(pub Uuid);
 
 impl AttachmentId {
     pub fn new() -> Self {

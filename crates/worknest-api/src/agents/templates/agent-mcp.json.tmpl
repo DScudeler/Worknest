@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "worknest": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "{{mcp_dir}}",
+        "worknest-mcp"
+      ],
+      "env": {
+        "WORKNEST_URL": "{{worknest_url}}",
+        "WORKNEST_PROJECT_ID": "{{project_id}}",
+        "WORKNEST_PERSONA": "{{persona_slug}}",
+        "WORKNEST_TOKEN_FILE": "{{token_file}}",
+        "WORKNEST_PERSONAS": "{{personas_path}}"
+      }
+    }
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__worknest__wn_list_my_tickets",
+      "mcp__worknest__wn_get_ticket",
+      "mcp__worknest__wn_inbox",
+      "mcp__worknest__wn_claim_ticket",
+      "mcp__worknest__wn_comment",
+      "mcp__worknest__wn_handoff",
+      "mcp__worknest__wn_finish",
+      "mcp__worknest__wn_create_subtask",
+      "mcp__worknest__wn_create_ticket",
+      "mcp__worknest__wn_attach_text",
+
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "TodoWrite",
+
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git fetch*)",
+      "Bash(git merge*)",
+      "Bash(git rev-parse*)",
+      "Bash(git show*)",
+      "Bash(npm test*)",
+      "Bash(npm run*)",
+      "Bash(pytest*)",
+      "Bash(cargo test*)",
+      "Bash(cargo build*)",
+      "Bash(cargo check*)",
+      "Bash(cargo clippy*)",
+      "Bash(cargo fmt*)",
+      "Bash(cmake*)",
+      "Bash(ninja*)",
+      "Bash(xvfb-run*)"
+    ],
+    "deny": []
+  },
+  "env": {
+    "WORKNEST_AGENT_PERSONA": "{{persona_slug}}",
+    "WORKNEST_AGENT_PROJECT_ID": "{{project_id}}",
+    "WORKNEST_AGENT_DEPLOYMENT_ID": "{{deployment_id}}",
+    "WORKNEST_URL": "{{worknest_url}}",
+    "CLAUDE_PROJECT_DIR": "{{workspace_path}}"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{guard_script}}"
+          }
+        ]
+      }
+    ]
+  }
+}

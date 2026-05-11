@@ -21,6 +21,14 @@ pub fn hash_password(password: &str) -> Result<String> {
     hash(password, BCRYPT_COST).map_err(|e| AuthError::Internal(e.to_string()))
 }
 
+/// Hash a password without running the strength validator. Reserved for
+/// system-internal callers (e.g. the agents subsystem, which generates a
+/// random unguessable password for autonomous-agent users that never log in
+/// via `/api/auth/login`).
+pub fn hash_password_unchecked(password: &str) -> Result<String> {
+    hash(password, BCRYPT_COST).map_err(|e| AuthError::Internal(e.to_string()))
+}
+
 /// Verify a password against a hash
 ///
 /// # Arguments
@@ -37,7 +45,11 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 ///
 /// Requirements:
 /// - At least 8 characters
-/// - At most 128 characters (bcrypt limit)
+/// - At most 72 characters (bcrypt limit)
+/// - At least one uppercase letter
+/// - At least one lowercase letter
+/// - At least one digit
+/// - At least one special character
 ///
 /// # Arguments
 /// * `password` - The password to validate
@@ -51,6 +63,30 @@ fn validate_password(password: &str) -> Result<()> {
     if password.len() > 72 {
         return Err(AuthError::PasswordValidation(
             "Password must be at most 72 characters (bcrypt limit)".to_string(),
+        ));
+    }
+
+    if !password.chars().any(|c| c.is_uppercase()) {
+        return Err(AuthError::PasswordValidation(
+            "Password must contain at least one uppercase letter".to_string(),
+        ));
+    }
+
+    if !password.chars().any(|c| c.is_lowercase()) {
+        return Err(AuthError::PasswordValidation(
+            "Password must contain at least one lowercase letter".to_string(),
+        ));
+    }
+
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err(AuthError::PasswordValidation(
+            "Password must contain at least one digit".to_string(),
+        ));
+    }
+
+    if !password.chars().any(|c| !c.is_alphanumeric()) {
+        return Err(AuthError::PasswordValidation(
+            "Password must contain at least one special character".to_string(),
         ));
     }
 
@@ -95,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_password_too_short() {
-        let password = "short";
+        let password = "Sh0r!";
         let result = hash_password(password);
 
         assert!(result.is_err());
@@ -107,7 +143,8 @@ mod tests {
 
     #[test]
     fn test_password_too_long() {
-        let password = "a".repeat(73);
+        // 73 chars with complexity requirements met
+        let password = format!("Aa1!{}", "a".repeat(69));
         let result = hash_password(&password);
 
         assert!(result.is_err());
@@ -118,13 +155,53 @@ mod tests {
     }
 
     #[test]
+    fn test_password_missing_uppercase() {
+        let result = hash_password("lowercase1!");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AuthError::PasswordValidation(_)
+        ));
+    }
+
+    #[test]
+    fn test_password_missing_lowercase() {
+        let result = hash_password("UPPERCASE1!");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AuthError::PasswordValidation(_)
+        ));
+    }
+
+    #[test]
+    fn test_password_missing_digit() {
+        let result = hash_password("NoDigits!here");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AuthError::PasswordValidation(_)
+        ));
+    }
+
+    #[test]
+    fn test_password_missing_special() {
+        let result = hash_password("NoSpecial1here");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AuthError::PasswordValidation(_)
+        ));
+    }
+
+    #[test]
     fn test_password_edge_cases() {
-        // Minimum length
-        let min_password = "12345678";
+        // Minimum length with all requirements
+        let min_password = "Aa1!abcd";
         assert!(hash_password(min_password).is_ok());
 
-        // Maximum length
-        let max_password = "a".repeat(72);
+        // Maximum length with all requirements
+        let max_password = format!("Aa1!{}", "b".repeat(68));
         assert!(hash_password(&max_password).is_ok());
     }
 }

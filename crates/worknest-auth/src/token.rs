@@ -1,7 +1,9 @@
 //! JWT token generation and validation
 
+use std::collections::HashSet;
+
 use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -126,10 +128,18 @@ impl TokenManager {
     /// # Returns
     /// The decoded claims if valid
     pub fn verify_token(&self, token: &str) -> Result<Claims> {
+        // Pin algorithm to HS256 (matches Header::default()) and require the
+        // claims we actually emit. Default Validation also accepts other algs
+        // and skips iat/jti checks, so we lock both down.
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.leeway = 0;
+        validation.required_spec_claims =
+            HashSet::from(["exp".to_string(), "iat".to_string(), "sub".to_string()]);
+
         let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.secret.as_bytes()),
-            &Validation::default(),
+            &validation,
         )
         .map_err(|e| {
             if e.to_string().contains("ExpiredSignature") {

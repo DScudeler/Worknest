@@ -1,0 +1,58 @@
+[package]
+name = "worknest-gui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Workspace dependencies
+worknest-core = { path = "../worknest-core" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+# GUI framework (web-only)
+eframe = { workspace = true, default-features = false, features = ["glow", "web_screen_reader"] }
+egui.workspace = true
+egui_extras.workspace = true
+
+# Web/WASM dependencies
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "Storage",
+    "Location",
+    "UrlSearchParams",
+    "Headers",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "console",
+] }
+gloo-storage = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+getrandom = { version = "0.3.4", features = ["wasm_js"] }
+web-time = "1.1"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

@@ -5,8 +5,10 @@ members = [
     "crates/worknest-db",
     "crates/worknest-auth",
     "crates/worknest-api",
-    "crates/worknest-gui",
 ]
+# Exclude the retired egui frontend so workspace-wide commands don't touch it.
+# It still compiles standalone for wasm32 if anyone needs to bisect.
+exclude = ["legacy/worknest-gui"]
 
 [workspace.package]
 version = "0.1.0"
@@ -42,37 +44,38 @@ refinery = { version = "0.9", features = ["rusqlite"] }
 
 # Authentication
 bcrypt = "0.17"
-jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3", default-features = false, features = ["aws_lc_rs"] }
 rand = "0.9.2"
-
-# GUI (web-only)
-eframe = { version = "0.33", default-features = false, features = ["glow", "web_screen_reader"] }
-egui = "0.33"
-egui_extras = "0.33"
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "signal", "process", "io-util"] }
 
 # Web framework
 axum = { version = "0.8", features = ["multipart"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "set-header"] }
 hyper = { version = "1.7", features = ["full"] }
 
 # Testing
 proptest = "1.4"
 mockall = "0.13.1"
+tempfile = "3.10"
 
-# WASM/Web
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-web-sys = "0.3"
-gloo-storage = "0.3"
+# HTTP client (used by integration tests etc.)
 reqwest = "0.12"
+
+# Cron evaluation for the agents scheduler
+cron = "0.15"
+
+# Advisory file locking for per-deployment tick mutual exclusion
+fs2 = "0.4"
+
+# `async fn` in traits with dyn dispatch (used by the agents tick executor)
+async-trait = "0.1"
 
 [profile.release]
 opt-level = 3

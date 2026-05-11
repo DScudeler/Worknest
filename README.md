@@ -1,275 +1,197 @@
 # Worknest
 
-**An open-source project and task manager built for software development teams**
+**An open-source ticket manager built around autonomous AI agents.**
 
-[![Deploy to GitHub Pages](https://github.com/DScudeler/Worknest/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/DScudeler/Worknest/actions/workflows/deploy-pages.yml)
+Worknest treats Claude Code agents as first-class teammates: you author
+*personas*, deploy them onto a project, and a cron-driven scheduler ticks
+them through the same backlog your humans work from. Agents read and
+write tickets through an MCP server, comment, hand off work to each
+other, and commit on isolated git worktrees — all observable from the
+same React UI your team already uses.
 
-Worknest is a modern, high-performance project management tool built entirely in Rust. It provides a responsive web application that works seamlessly on both desktop and mobile browsers, giving developers a fast, reliable, and extensible platform for managing projects and tasks.
+<p align="center">
+  <img src="docs/screenshots/agents-deployments.png" alt="Agents → Deployments view: live persona cards with run status, last tick, and controls" width="900">
+</p>
 
-## 🚀 Try the Demo
+## What's in the box
 
-**[Launch Worknest Demo](https://dscudeler.github.io/Worknest/)** _(once GitHub Pages is enabled)_
+- **Personas** — versioned agent definitions (role, capabilities,
+  system prompt, model tier). Edit, snapshot, and reuse across projects.
+- **Deployments** — `(persona × project)` pairs with their own
+  JWT identity, on-disk workspace, and `swarm/<persona-slug>` git
+  worktree. Suspend, resume, retry, or stop from the UI.
+- **Tick scheduler** — claims due deployments under an `flock`
+  advisory lock and spawns `claude --permission-mode auto -p
+  /agent-tick`. One ticket → terminal state per session, then exit.
+- **MCP toolbelt** (`worknest-mcp/`) — Python FastMCP server exposing
+  `wn_inbox`, `wn_claim_ticket`, `wn_comment`, `wn_handoff`, `wn_finish`,
+  `wn_create_subtask`, and friends. Race-free claims via `If-Match`.
+- **Workspace guard** — every agent tick runs with a PreToolUse hook
+  that restricts edits to `CLAUDE_PROJECT_DIR=<workspace>`, so agents
+  can't escape their worktree.
+- **Human UX, unchanged** — list + Kanban views, search, tags, comments
+  with mentions, attachments, dashboard stats, optimistic concurrency
+  on ticket update (`If-Match` / `ETag`).
+- **VSCode extension** — browse, create, and claim tickets from inside
+  the IDE.
 
-The demo runs entirely in your browser with no backend required! All data is stored locally in your browser's localStorage.
+## Screens
 
-## Features
-
-### Core Platform (v1.0) ✅
-- ✅ User authentication and session management
-- ✅ Project management (create, organize, archive)
-- ✅ Comprehensive ticket system (tasks, bugs, features, epics)
-- ✅ Multiple views: List, Kanban board
-- ✅ Priority and status tracking
-- ✅ Responsive web UI powered by egui
-- ✅ REST API with JWT authentication
-- ✅ Full-text search with SQLite FTS
-- ✅ Comments and attachments
-
-### VSCode Integration (NEW!) 🎉
-- 🆕 **VSCode Extension**: Seamless IDE integration
-- 🆕 **Ticket Tree View**: Browse projects and tickets in sidebar
-- 🆕 **Git Integration**: Smart commit messages and branch creation
-- 🆕 **Status Bar**: Current ticket indicator
-- 🆕 **Command Palette**: Quick ticket operations
-- 🆕 **Search**: Full-text search across all tickets
-- See [worknest-vscode/](worknest-vscode/) and [QUICKSTART.md](QUICKSTART.md)
-
-### Future Releases
-- **v2.0**: Advanced features (custom fields, workflows, reporting)
-- **v3.0**: Plugin system with WASM-based extensibility
-- **v4.0**: Cloud sync and collaboration features
-- **v5.0+**: AI assistance, progressive web app, advanced integrations
-
-See [ROADMAP.md](./ROADMAP.md) for the complete development plan.
-
-## Why Worknest?
-
-- **Performance**: Built in Rust for maximum speed and efficiency
-- **Responsive**: Works seamlessly on desktop and mobile browsers
-- **Developer-Focused**: Built by developers, for developers
-- **Extensible**: Plugin system for custom integrations (coming in v3.0)
-- **Open Source**: Free forever, community-driven development
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/persona-library.png" alt="Persona library — capability checklist, model tier, snapshot history"></td>
+    <td width="50%"><img src="docs/screenshots/run-detail.png" alt="Run detail drawer — tick log with stdout, exit code, durations"></td>
+  </tr>
+  <tr>
+    <td><strong>Persona library.</strong> Reusable agent definitions:
+        role, capability checklist, expertise tags, model tier.</td>
+    <td><strong>Run detail.</strong> Permissions, recent tick output,
+        and the deployment lifecycle log — what the agent did and why.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/kanban.png" alt="Kanban board with humans and agents on the same swimlanes"></td>
+    <td><img src="docs/screenshots/deploy-modal.png" alt="Deploy modal — pick persona, project, capability override"></td>
+  </tr>
+  <tr>
+    <td><strong>Shared backlog.</strong> Humans and agents work the same
+        Kanban; status transitions are race-free via <code>If-Match</code>.</td>
+    <td><strong>Deploy a persona.</strong> Pick the project, set the
+        cron, hit Deploy. The scheduler takes it from there.</td>
+  </tr>
+</table>
 
 ## Architecture
-
-Worknest follows a modular architecture with clear separation of concerns:
 
 ```
 worknest/
 ├── crates/
-│   ├── worknest-core/       # Core business logic
-│   ├── worknest-db/         # Database layer (SQLite)
-│   ├── worknest-auth/       # Authentication
-│   ├── worknest-api/        # Backend API server (REST)
-│   ├── worknest-gui/        # Web UI (egui/WASM)
-│   └── worknest-plugins/    # Plugin system (future)
-├── worknest-vscode/         # VSCode extension (NEW!)
-│   ├── src/
-│   │   ├── api/            # TypeScript API client
-│   │   ├── views/          # Tree view & status bar
-│   │   ├── commands/       # Ticket & git commands
-│   │   └── utils/          # Config & storage
-│   └── package.json        # Extension manifest
+│   ├── worknest-core/    Domain models + validation
+│   ├── worknest-db/      SQLite repositories + refinery migrations
+│   ├── worknest-auth/    bcrypt + JWT (HS256, aws-lc-rs backend)
+│   └── worknest-api/     Axum REST API
+│       └── src/agents/   Activation, scheduler, workspace, tick exec
+├── web/                  React + Vite SPA (humans + agent dashboard)
+├── worknest-mcp/         Python FastMCP — the agent toolbelt
+├── worknest-vscode/      TypeScript VSCode extension
+└── legacy/worknest-gui/  Retired egui frontend (excluded from workspace)
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical documentation.
+The activation pipeline provisions each deployment under
+`$WORKNEST_AGENTS_DIR/<deployment_id>/` (default
+`~/.local/share/worknest/agents/`). When the project has a `repo_path`
+set, that workspace **is** a git worktree on branch
+`swarm/<persona-slug>`; `CLAUDE.md`, `.mcp.json`,
+`.claude/settings.json`, the JWT token, and a `guard-worktree.sh`
+PreToolUse hook are rendered into it.
 
-## Getting Started
+See `crates/worknest-api/src/agents/` and `worknest-mcp/README.md` for
+the gritty detail. `CLAUDE.md` at the repo root is the contributor
+cheat-sheet.
+
+## Getting started
 
 ### Prerequisites
 
-- Rust 1.70+ (install from [rustup.rs](https://rustup.rs))
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/) for building the web application (`cargo install wasm-pack`)
-- wasm32 target (`rustup target add wasm32-unknown-unknown`)
-- Python 3 (for local development server)
+- Rust 1.70+ (https://rustup.rs)
+- Node 20+ and npm 9+
+- **For agent runs:** [`claude`](https://docs.claude.com/en/docs/claude-code/overview)
+  CLI, [`uv`](https://docs.astral.sh/uv/), and `git` on `PATH`
 
-### Building from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/DScudeler/Worknest.git
-cd Worknest
-
-# Build the web application (simple one-command build)
-make build-webapp
-
-# Or use the build script directly
-./build-webapp.sh release
-
-# The built files will be in the dist/ directory
-```
-
-### Development
-
-**Demo Mode**: The webapp runs in full demo mode with in-memory data - no backend required! Perfect for trying out features and UI development.
+### One-time setup
 
 ```bash
-# Build and serve the web application locally
-make serve-webapp
+# Backend builds + applies migrations on first run
+cargo build --workspace
 
-# Or manually:
-./build-webapp.sh release
-cd dist && python3 serve.py
+# Frontend
+cd web && npm install && cd ..
 
-# The application will be available at http://localhost:8080
-
-# Run tests (backend only)
-make test
-
-# Or:
-cargo test --workspace --exclude worknest-gui
-
-# Check code formatting
-make fmt
-
-# Run linter
-make clippy
-
-# Quick check (format + lint + test)
-make quick-check
+# MCP toolbelt — populates worknest-mcp/.venv
+cd worknest-mcp && uv sync && cd ..
 ```
 
-**Available Make Commands:**
-```bash
-make help              # Show all available commands
-make build-webapp      # Build webapp in production mode
-make serve-webapp      # Build and serve webapp locally
-make test              # Run all tests
-make fmt               # Format code
-make clippy            # Run linter
-make clean             # Clean build artifacts
-```
-
-### VSCode Extension Setup
-
-Quick start with the VSCode extension:
+### Run the system locally
 
 ```bash
-# Terminal 1: Start the API server
-cargo run --package worknest-api
+# Terminal 1 — API on :3000 (creates ./worknest-api.db on first run)
+cargo run -p worknest-api
 
-# Terminal 2: Build and launch extension
-cd worknest-vscode
-npm install
-npm run compile
-
-# Press F5 in VSCode to launch extension in debug mode
+# Terminal 2 — React frontend on :5173 with /api proxy to :3000
+cd web && npm run dev
 ```
 
-For detailed setup instructions, see:
-- [QUICKSTART.md](QUICKSTART.md) - 5-minute quick start guide
-- [worknest-vscode/README.md](worknest-vscode/README.md) - Full extension documentation
-- [worknest-vscode/INSTALLATION.md](worknest-vscode/INSTALLATION.md) - Detailed installation guide
+Open http://127.0.0.1:5173, register an account, create a project, then
+head to **Agents → Library**, define a persona, and deploy it onto your
+project. The scheduler picks up due deployments and ticks them on its
+own.
 
-**Key Features:**
-- Browse and manage tickets from VSCode sidebar
-- Create tickets with `Ctrl+Alt+W T`
-- Search tickets with `Ctrl+Alt+W S`
-- Auto-populate commit messages from ticket info
-- Create branches from tickets
-- View current ticket in status bar
+### Environment variables
 
-## Deploying to GitHub Pages
+API (see `.env`):
 
-To enable the live demo on GitHub Pages:
+- `PORT` — default `3000`
+- `WORKNEST_DB_PATH` — SQLite file path
+- `WORKNEST_SECRET_KEY` — required (≥32 bytes) when `WORKNEST_ENV=production`
+- `WORKNEST_ALLOWED_ORIGINS` — comma-separated CORS origins
+- `RUST_LOG` — log filter
 
-1. **Enable GitHub Pages in your repository:**
-   - Go to your repository Settings → Pages
-   - Under "Source", select "GitHub Actions"
-   - Save the settings
+Agents subsystem:
 
-2. **The workflow will automatically deploy when you push to `main`:**
-   - The `.github/workflows/deploy-pages.yml` workflow builds the webapp
-   - Deploys to GitHub Pages automatically
-   - Your demo will be available at: `https://dscudeler.github.io/Worknest/`
+- `WORKNEST_AGENTS_DIR` — workspace root (default
+  `~/.local/share/worknest/agents`)
+- `WORKNEST_AGENT_MCP_DIR` — override path to `worknest-mcp/` (auto-detected)
+- `WORKNEST_CLAUDE_BIN` — `claude` binary (default `claude`, via `PATH`)
+- `WORKNEST_PUBLIC_URL` — URL the MCP server uses to reach the API
+- `WORKNEST_AGENT_TICK_TIMEOUT_SECS` — per-tick wallclock cap (default 600)
 
-3. **Manual deployment (optional):**
-   - Go to Actions → Deploy to GitHub Pages
-   - Click "Run workflow" → "Run workflow"
+## Development commands
 
-**Note:** The first deployment may take a few minutes. Once deployed, your demo mode will be accessible to anyone with the URL!
+Backend:
 
-## Project Status
+```bash
+cargo build  --workspace
+cargo test   --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
 
-**Current Phase**: MVP Development (~85% Complete)
+Frontend (from `web/`):
 
-The MVP is in advanced development with most core features implemented and tested.
+```bash
+npm run dev        # Vite dev server with /api proxy
+npm run build      # Production build to web/dist/
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint
+```
 
-### Roadmap Progress
-- [x] Project planning and architecture design
-- [x] Workspace and crate structure setup (5 crates)
-- [x] Database schema and migrations (SQLite with refinery)
-- [x] Authentication system (JWT + bcrypt)
-- [x] Core domain models (User, Project, Ticket, Comment, Attachment)
-- [x] Repository implementations (Full CRUD - 26 passing tests)
-- [x] REST API endpoints (Complete with auth middleware)
-- [x] GUI application shell (egui + WASM)
-- [x] Project management features (Create, update, delete, archive)
-- [x] Ticket management features (List, board, CRUD operations)
-- [x] Testing infrastructure (45 passing tests: 19 GUI + 26 repository)
-- [ ] Frontend-Backend integration (requires backend deployment)
-- [ ] Complete documentation and deployment guides
+VSCode extension:
 
-## Contributing
+```bash
+cd worknest-vscode && npm install && npm run compile
+# Press F5 in VSCode to launch the Extension Development Host
+```
 
-We welcome contributions! Whether it's bug reports, feature requests, or code contributions, all help is appreciated.
+## Deployment
 
-### How to Contribute
+The API is REST-only — deploy it behind nginx/Caddy and serve
+`web/dist/` as a static site. Add the static frontend's origin to
+`WORKNEST_ALLOWED_ORIGINS`.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+For agents, the host running the API also needs `claude`, `uv`, and
+`git` on `PATH`, plus write access to `WORKNEST_AGENTS_DIR`. Anthropic
+API credentials are read by the spawned `claude` subprocess from its
+own environment — Worknest never sees them.
 
-### Development Guidelines
+## Technology stack
 
-- Follow Rust standard naming conventions
-- Write tests for new features
-- Update documentation as needed
-- Run `cargo fmt` and `cargo clippy` before committing
-- Keep commits focused and atomic
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) (coming soon) for detailed guidelines.
-
-## Technology Stack
-
-- **Language**: Rust 🦀
-- **Frontend**: egui (immediate mode GUI) + WASM
-- **Backend**: Axum web framework
-- **Database**: SQLite with rusqlite
-- **Authentication**: JWT + bcrypt
-- **Serialization**: serde
-- **Testing**: cargo test + proptest
-- **Build Tool**: wasm-pack
-- **Demo Mode**: Fully functional in-browser demo with localStorage
-- **Future**: wasmer/wasmtime (plugins)
+- **Backend** — Rust, Axum, SQLite (rusqlite + r2d2), refinery migrations,
+  JWT (`jsonwebtoken` + `aws-lc-rs`), bcrypt, tower-http (CORS, tracing)
+- **Frontend** — React 18, TypeScript, Vite, React Router, TanStack Query,
+  Lucide icons, react-hot-toast, vanilla CSS with design tokens
+- **Agents runtime** — Claude Code CLI (one subprocess per tick),
+  Python `worknest-mcp` via `uv run`, per-deployment git worktrees
+- **VSCode extension** — TypeScript, axios
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
-## Documentation
-
-- [Roadmap](./ROADMAP.md) - Complete product roadmap
-- [Architecture](./ARCHITECTURE.md) - Technical architecture and design
-- [Contributing](./CONTRIBUTING.md) - Contribution guidelines (coming soon)
-- [API Documentation](./docs/api.md) - API reference (coming soon)
-
-## Community
-
-- **Issues**: [GitHub Issues](https://github.com/DScudeler/Worknest/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/DScudeler/Worknest/discussions)
-- **Discord**: Coming soon
-
-## Acknowledgments
-
-Special thanks to the Rust community and the egui project for making this possible.
-
-## Star History
-
-If you find Worknest useful, please consider giving it a star on GitHub!
-
----
-
-**Built with ❤️ and Rust**
+MIT — see `LICENSE`.

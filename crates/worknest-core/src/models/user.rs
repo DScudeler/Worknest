@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 /// User identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct UserId(pub Uuid);
 
 impl UserId {
@@ -45,6 +46,18 @@ pub struct User {
     pub id: UserId,
     pub username: String,
     pub email: String,
+    /// Optional display name for UI ("Maya Chen"). When absent, clients
+    /// should fall back to `username`.
+    #[serde(default)]
+    pub full_name: Option<String>,
+    /// Optional avatar URL. Clients render the user's initials when absent.
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+    /// Marks autonomous agent identities created by the agents subsystem.
+    /// These accounts cannot log in; they exist so agents can post comments
+    /// and own tickets like any other user.
+    #[serde(default)]
+    pub is_agent: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -57,6 +70,9 @@ impl User {
             id: UserId::new(),
             username,
             email,
+            full_name: None,
+            avatar_url: None,
+            is_agent: false,
             created_at: now,
             updated_at: now,
         }
